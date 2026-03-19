@@ -276,32 +276,35 @@ export default function NeuroCashApp() {
     
     let finalAtms: ATM[] = [];
 
-    // GOOGLE PLACES API FETCH
-    const GOOGLE_API_KEY = "AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k";
-    const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=1000&type=atm&key=${GOOGLE_API_KEY}`;
+    // REAL-WORLD OPENSTREETMAP (OVERPASS API) - 100% Free, No CORS restrictions on Web!
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];node(around:1000,${userLocation.latitude},${userLocation.longitude})[amenity=atm];out;`;
     
-    let googleAtms: ATM[] = [];
+    let realAtms: ATM[] = [];
     try {
-      const placesResponse = await axios.get(placesUrl);
-      if (placesResponse.data.results) {
-        googleAtms = placesResponse.data.results.map((place: any) => ({
-          id: place.place_id,
-          bank_name: place.name || 'ATM',
-          branch_name: place.vicinity || 'Local Node',
-          address: place.vicinity || 'Extracted via Google Maps',
-          latitude: place.geometry.location.lat,
-          longitude: place.geometry.location.lng,
-          current_status: 'grey', // Default until actively crowd-sourced
-          bank_online: true,
-          last_report_time: null,
-          distance_meters: haversineDistance(
+      const overpassRes = await axios.get(overpassUrl);
+      if (overpassRes.data && overpassRes.data.elements) {
+        realAtms = overpassRes.data.elements.map((node: any) => {
+          const tags = node.tags || {};
+          const dist = haversineDistance(
             userLocation.latitude, userLocation.longitude, 
-            place.geometry.location.lat, place.geometry.location.lng
-          )
-        }));
+            node.lat, node.lon
+          );
+          return {
+            id: `osm-${node.id}`,
+            bank_name: tags.name || tags.operator || tags.network || 'Local ATM',
+            branch_name: tags.branch || 'Street Node',
+            address: `${Math.round(dist)}m away`,
+            latitude: node.lat,
+            longitude: node.lon,
+            current_status: 'grey', // Default until dynamically crowd-sourced
+            bank_online: true,
+            last_report_time: null,
+            distance_meters: dist
+          };
+        });
       }
     } catch (err) {
-      console.error("Google Places API Fetch Failed", err);
+      console.error("Overpass OSM API Fetch Failed", err);
     }
 
     try {
@@ -315,19 +318,38 @@ export default function NeuroCashApp() {
       });
       const backendAtms = response.data;
       
-      // Merge Google real locations with precise user liquidity reports!
-      finalAtms = googleAtms.map(gAtm => {
-         const bAtm = backendAtms.find((b: any) => b.id === gAtm.id);
+      // Merge OpenStreetMap real physical locations with exact user liquidity reports!
+      finalAtms = realAtms.map(rAtm => {
+         const bAtm = backendAtms.find((b: any) => b.id === rAtm.id);
          if (bAtm) {
-             return { ...gAtm, current_status: bAtm.current_status, last_report_time: bAtm.last_report_time };
+             return { ...rAtm, current_status: bAtm.current_status, last_report_time: bAtm.last_report_time };
          }
-         return gAtm;
+         return rAtm;
       });
     } catch (error) {
-      console.error('Error fetching crowdsourced ATMs from backend, defaulting to raw Google Maps state:', error);
-      finalAtms = googleAtms;
+      console.error('Error fetching crowdsourced statuses from backend (Vercel offline?), defaulting to raw OSM state:', error);
+      finalAtms = realAtms;
     } finally {
-      // Strictly sort the absolute real Google Maps ATMs nearest to furthest
+      // GUARANTEED FALLBACK: If the user lives in a perfectly remote area with exactly ZERO real OSM ATMs in their 1km!
+      if (finalAtms.length === 0) {
+        console.log("No real OSM ATMs found in 1km radius! Injecting Universal Demos.");
+        finalAtms = [
+          {
+            id: `demo-1-${Date.now()}`, bank_name: 'Global Mock Bank', branch_name: 'Alpha Node',
+            address: 'Demo Location A', latitude: userLocation.latitude + 0.0015, longitude: userLocation.longitude + 0.0015,
+            current_status: 'green', bank_online: true, last_report_time: null,
+            distance_meters: haversineDistance(userLocation.latitude, userLocation.longitude, userLocation.latitude + 0.0015, userLocation.longitude + 0.0015)
+          },
+          {
+            id: `demo-2-${Date.now()}`, bank_name: 'NeuroCash Vault', branch_name: 'Beta Hub',
+            address: 'Demo Location B', latitude: userLocation.latitude - 0.002, longitude: userLocation.longitude - 0.001,
+            current_status: 'yellow', bank_online: true, last_report_time: null,
+            distance_meters: haversineDistance(userLocation.latitude, userLocation.longitude, userLocation.latitude - 0.002, userLocation.longitude - 0.001)
+          }
+        ];
+      }
+
+      // Strictly sort the absolute real (or mock) ATMs nearest to furthest
       finalAtms.sort((a, b) => (a.distance_meters || 0) - (b.distance_meters || 0));
       
       setAtms(finalAtms);
