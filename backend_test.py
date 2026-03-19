@@ -11,7 +11,7 @@ from typing import Dict, List, Any
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://neurocash-atm-1.preview.emergentagent.com/api"
+BASE_URL = "http://localhost:8000/api"
 BARASAT_LAT = 22.7246
 BARASAT_LNG = 88.4844
 WITHIN_GEOFENCE_LAT = 22.7247  # Very close to an ATM

@@ -1,0 +1,8 @@
+{
+  "name": "neurocash",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npx expo export -p web"
+  }
+}

@@ -1,0 +1,49 @@
+Running 17 checks on your project...
+14/17 checks passed. 3 checks failed. Possible issues detected:
+Use the --verbose flag to see more details about passed checks.
+
+✖ Check Expo config (app.json/ app.config.js) schema
+Errors validating fields in C:\Users\User\OneDrive\Desktop\Valen2026\Neurocash\frontend\app.json:
+ Field: androidStatusBar/backgroundColor - 'androidStatusBar/backgroundColor' should be a 6 character long hex color string `'#RRGGBB'`, for example, `'#000000'` for black. Or 8 character long hex color string `'#RRGGBBAA'`, for example, `'#00000088'` for semi-transparent black..
+ Field: android/adaptiveIcon/backgroundColor - 'android/adaptiveIcon/backgroundColor' should be a 6 character long hex color string, for example, `'#000000'`.
+Error validating asset fields in C:\Users\User\OneDrive\Desktop\Valen2026\Neurocash\frontend\app.json:
+ Field: Android.adaptiveIcon.foregroundImage - the file extension should match the content, but the file extension is .png while the file content at './assets/images/adaptive-icon.png' is of type jpg.
+ Field: Android.adaptiveIcon.foregroundImage - field 'Android.adaptiveIcon.foregroundImage' should point to .png image but the file at './assets/images/adaptive-icon.png' has type jpg.
+ Field: icon - the file extension should match the content, but the file extension is .png while the file content at './assets/images/icon.png' is of type jpg.
+ Field: icon - field 'icon' should point to .png image but the file at './assets/images/icon.png' has type jpg.
+Advice:
+Resolve schema errors in your app config. Learn more: https://docs.expo.dev/workflow/configuration/
+
+✖ Check that no duplicate dependencies are installed
+Your project contains duplicate native module dependencies, which should be de-duplicated.
+Native builds may only contain one version of any given native module, and having multiple versions of a single Native module installed may lead to unexpected build errors.
+Found duplicates for expo-constants:
+  ├─ expo-constants@18.0.13 (at: node_modules\expo-constants)
+  └─ expo-constants@55.0.9 (at: node_modules\expo-auth-session\node_modules\expo-constants)
+Found duplicates for expo-linking:
+  ├─ expo-linking@8.0.11 (at: node_modules\expo-linking)
+  └─ expo-linking@55.0.8 (at: node_modules\expo-auth-session\node_modules\expo-linking)
+Found duplicates for expo-web-browser:
+  ├─ expo-web-browser@15.0.10 (at: node_modules\expo-web-browser)
+  └─ expo-web-browser@55.0.10 (at: node_modules\expo-auth-session\node_modules\expo-web-browser)
+Advice:
+Resolve your dependency issues and deduplicate your dependencies. Learn more: https://expo.fyi/resolving-dependency-issues
+
+✖ Check that packages match versions required by installed Expo SDK
+
+❗ Major version mismatches
+package                                    expected  found    
+@react-native-async-storage/async-storage  2.2.0     3.0.1    
+expo-auth-session                          ~7.0.10   55.0.9   
+expo-crypto                                ~15.0.8   55.0.10  
+
+Changelogs:
+- expo-auth-session → https://github.com/expo/expo/blob/sdk-54/packages/expo-auth-session/CHANGELOG.md
+- expo-crypto → https://github.com/expo/expo/blob/sdk-54/packages/expo-crypto/CHANGELOG.md
+
+3 packages out of date.
+Advice:
+Use 'npx expo install --check' to review and upgrade your dependencies.
+To ignore specific packages, add them to "expo.install.exclude" in package.json. Learn more: https://expo.fyi/dependency-validation
+
+3 checks failed, indicating possible issues with the project.

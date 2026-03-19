@@ -16,10 +16,30 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+WebBrowser.maybeCompleteAuthSession();
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://neurocash.vercel.app";
 const { width, height } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
+
+// Real-time Map Loaders
+let MapView: any = null;
+let Marker: any = null;
+let PROVIDER_GOOGLE: any = null;
+if (!isWeb) {
+  try {
+    const Maps = require('react-native-maps');
+    MapView = Maps.default;
+    Marker = Maps.Marker;
+    PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
+  } catch (e) {
+    console.log('Map error: ', e);
+  }
+}
 
 // Types
 interface ATM {
@@ -78,6 +98,15 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export default function NeuroCashApp() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
+    iosClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
+    androidClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
+  });
+
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [atms, setAtms] = useState<ATM[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,56 +127,114 @@ export default function NeuroCashApp() {
     longitude: 88.4844,
   };
 
-  // Start live location tracking
   useEffect(() => {
-    (async () => {
+    const checkLoginStatus = async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          if (!isWeb) {
-            Alert.alert('Permission Denied', 'Location permission is required. Using default location.');
+        const lastLoginStr = await AsyncStorage.getItem('lastLoginDate');
+        if (lastLoginStr) {
+          const lastLoginTime = parseInt(lastLoginStr, 10);
+          const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
+          
+          if (Date.now() - lastLoginTime < fifteenDaysInMs) {
+            setIsAuthenticated(true);
           }
-          setUserLocation(defaultLocation);
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-
-        setUserLocation({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        });
-
-        // Start watching location for live updates (native only)
-        if (!isWeb) {
-          locationSubscription.current = await Location.watchPositionAsync(
-            {
-              accuracy: Location.Accuracy.High,
-              timeInterval: 5000,
-              distanceInterval: 10,
-            },
-            (newLocation) => {
-              setUserLocation({
-                latitude: newLocation.coords.latitude,
-                longitude: newLocation.coords.longitude,
-              });
-            }
-          );
         }
       } catch (error) {
-        console.error('Location error:', error);
+        console.log('Error checking auth', error);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+    checkLoginStatus();
+  }, []);
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      if (authentication?.accessToken) AsyncStorage.setItem('googleToken', authentication.accessToken);
+      if (authentication?.idToken) AsyncStorage.setItem('googleToken', authentication.idToken);
+      AsyncStorage.setItem('lastLoginDate', Date.now().toString());
+      setIsAuthenticated(true);
+    }
+  }, [response]);
+
+  const fetchLocationWithPermission = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        if (!isWeb) {
+          Alert.alert('Permission Denied', 'Location permission is required. Using default location.');
+        } else {
+          window.alert('Permission Denied: Location permission is required. Using default location.');
+        }
+        setUserLocation(defaultLocation);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      // Start watching location for live updates (native only)
+      if (!isWeb) {
+        if (locationSubscription.current) {
+          locationSubscription.current.remove();
+        }
+        locationSubscription.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,
+            distanceInterval: 10,
+          },
+          (newLocation) => {
+            setUserLocation({
+              latitude: newLocation.coords.latitude,
+              longitude: newLocation.coords.longitude,
+            });
+          }
+        );
+      }
+    } catch (error) {
+      console.error('Location error:', error);
+      setUserLocation(defaultLocation);
+    }
+  }, []);
+
+  const askForLocationPermission = useCallback(() => {
+    if (isWeb) {
+      const confirm = window.confirm("NeuroCash needs your location to find nearby ATMs. Allow access?");
+      if (confirm) {
+        fetchLocationWithPermission();
+      } else {
         setUserLocation(defaultLocation);
       }
-    })();
+    } else {
+      Alert.alert(
+        "Location Access",
+        "NeuroCash needs your location to find nearby ATMs. Allow access?",
+        [
+          { text: "Deny", onPress: () => setUserLocation(defaultLocation), style: "cancel" },
+          { text: "Allow", onPress: fetchLocationWithPermission }
+        ]
+      );
+    }
+  }, [fetchLocationWithPermission]);
+
+  // Start live location tracking
+  useEffect(() => {
+    askForLocationPermission();
 
     return () => {
       if (locationSubscription.current) {
         locationSubscription.current.remove();
       }
     };
-  }, []);
+  }, [askForLocationPermission]);
 
   // Fetch nearby ATMs
   const fetchNearbyATMs = useCallback(async () => {
@@ -237,12 +324,16 @@ export default function NeuroCashApp() {
 
     setSubmitting(true);
     try {
+      const token = await AsyncStorage.getItem('googleToken');
+
       await axios.post(`${BACKEND_URL}/api/atms/${selectedATM.id}/report`, {
         atm_id: selectedATM.id,
-        user_id: userId,
+        user_id: "google_verified_user",
         status,
         user_lat: userLocation.latitude,
         user_lng: userLocation.longitude,
+      }, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
       if (!isWeb) {
@@ -262,7 +353,10 @@ export default function NeuroCashApp() {
   };
 
   const openInGoogleMaps = (atm: ATM) => {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${atm.latitude},${atm.longitude}`;
+    let url = `https://www.google.com/maps/dir/?api=1&destination=${atm.latitude},${atm.longitude}`;
+    if (userLocation) {
+      url = `https://www.google.com/maps/dir/?api=1&origin=${userLocation.latitude},${userLocation.longitude}&destination=${atm.latitude},${atm.longitude}`;
+    }
     Linking.openURL(url);
   };
 
@@ -436,6 +530,50 @@ export default function NeuroCashApp() {
   const renderListView = () => {
     return (
       <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+        
+        {/* Real-time Location Map */}
+        {userLocation && (
+          <View style={{ height: 250, width: '100%', backgroundColor: '#E5E7EB', borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
+            {isWeb ? (
+              <iframe
+                width="100%"
+                height="100%"
+                frameBorder="0"
+                style={{ border: 0 }}
+                src={`https://www.google.com/maps/embed/v1/view?key=AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k&center=${userLocation.latitude},${userLocation.longitude}&zoom=14`}
+                allowFullScreen
+              ></iframe>
+            ) : MapView ? (
+              <MapView
+                provider={PROVIDER_GOOGLE}
+                style={{ flex: 1 }}
+                initialRegion={{
+                  latitude: userLocation.latitude,
+                  longitude: userLocation.longitude,
+                  latitudeDelta: 0.04,
+                  longitudeDelta: 0.04,
+                }}
+                showsUserLocation={true}
+              >
+                {atms.map((atm) => (
+                  <Marker
+                    key={atm.id}
+                    coordinate={{ latitude: atm.latitude, longitude: atm.longitude }}
+                    title={`${atm.bank_name} - ${STATUS_LABELS[atm.current_status]}`}
+                    description={atm.branch_name}
+                    pinColor={atm.current_status === 'green' ? 'green' : atm.current_status === 'red' ? 'red' : atm.current_status === 'yellow' ? 'yellow' : 'navy'}
+                    onPress={() => handleATMPress(atm)}
+                  />
+                ))}
+              </MapView>
+            ) : (
+               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text>Map not available</Text>
+               </View>
+            )}
+          </View>
+        )}
+
         {atms.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="location-outline" size={64} color="#D1D5DB" />
@@ -498,7 +636,7 @@ export default function NeuroCashApp() {
   };
 
   // Loading state
-  if (loading || !userLocation) {
+  if (isAuthLoading || (isAuthenticated && (loading || !userLocation))) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
@@ -508,7 +646,30 @@ export default function NeuroCashApp() {
           <Text style={styles.loadingTitle}>NeuroCash</Text>
           <Text style={styles.loadingSubtitle}>ATM Liquidity Mapper</Text>
           <ActivityIndicator size="large" color="#4F46E5" style={{ marginTop: 24 }} />
-          <Text style={styles.loadingText}>Getting your location...</Text>
+          <Text style={styles.loadingText}>{isAuthLoading ? 'Verifying session...' : 'Getting your location...'}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.authContainer}>
+        <View style={styles.authContent}>
+          <View style={styles.authIconContainer}>
+            <Ionicons name="shield-checkmark" size={64} color="#4F46E5" />
+          </View>
+          <Text style={styles.authTitle}>Welcome to NeuroCash</Text>
+          <Text style={styles.authSubtitle}>Please sign in to view real-time ATM liquidity securely.</Text>
+          
+          <TouchableOpacity 
+             style={[styles.googleButton, !request && styles.reportButtonDisabled]} 
+             disabled={!request}
+             onPress={() => promptAsync()}
+          >
+            <Ionicons name="logo-google" size={24} color="#FFF" />
+            <Text style={styles.googleButtonText}>Sign in with Google</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -572,6 +733,13 @@ export default function NeuroCashApp() {
 }
 
 const styles = StyleSheet.create({
+  authContainer: { flex: 1, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  authContent: { alignItems: 'center', backgroundColor: '#FFF', padding: 32, borderRadius: 24, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  authIconContainer: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  authTitle: { fontSize: 24, fontWeight: '700', color: '#1F2937', marginBottom: 8, textAlign: 'center' },
+  authSubtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginBottom: 32 },
+  googleButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4285F4', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', justifyContent: 'center' },
+  googleButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600', marginLeft: 12 },
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   loadingContainer: { flex: 1, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
   loadingContent: { alignItems: 'center' },
