@@ -19,6 +19,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { makeRedirectUri } from 'expo-auth-session';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -101,10 +102,18 @@ export default function NeuroCashApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
+  const redirectUri = isWeb 
+    ? (typeof window !== 'undefined' ? window.location.origin : 'https://neurocash.vercel.app')
+    : makeRedirectUri({ scheme: 'neurocash' });
+  
+  console.log("REQUIRED GOOGLE REDIRECT URI TO WHITELIST:", redirectUri);
+
   const [request, response, promptAsync] = Google.useAuthRequest({
+    clientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
     webClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
     iosClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
-    androidClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
+    androidClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com', 
+    redirectUri,
   });
 
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
