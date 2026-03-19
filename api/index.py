@@ -1,5 +1,7 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
+import requests
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
@@ -318,11 +320,31 @@ async def get_all_atms():
         raise HTTPException(status_code=500, detail=str(e))
 
 # TC_02: Geofence Lock - Report Status
+security = HTTPBearer()
+
+def verify_google_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        response = requests.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={token}")
+        if response.status_code != 200:
+            response = requests.get(f"https://oauth2.googleapis.com/tokeninfo?access_token={token}")
+            
+        if response.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid or expired Google token")
+            
+        token_info = response.json()
+        return token_info.get("sub", "unknown_user")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token verification error: {e}")
+        raise HTTPException(status_code=401, detail="Could not verify credentials")
+
 @api_router.post("/atms/{atm_id}/report")
-async def report_atm_status(atm_id: str, report: StatusReportCreate):
+async def report_atm_status(atm_id: str, report: StatusReportCreate, user_id: str = Depends(verify_google_token)):
     """
     Report ATM status. Only allowed if user is within 50m of ATM.
-    TC_02: Geofence validation.
+    TC_02: Geofence validation. Securely authenticated via Google OAuth.
     """
     try:
         # Find the ATM
@@ -353,7 +375,7 @@ async def report_atm_status(atm_id: str, report: StatusReportCreate):
         # Create status report
         status_report = StatusReport(
             atm_id=atm_id,
-            user_id=report.user_id,
+            user_id=user_id,
             status=report.status,
             user_lat=report.user_lat,
             user_lng=report.user_lng
