@@ -254,16 +254,30 @@ export default function NeuroCashApp() {
         params: {
           lat: userLocation.latitude,
           lng: userLocation.longitude,
-          radius: 1000,
+          radius: 1000, // Strict 1km radius passed to MongoDB 2dsphere
         },
       });
       setAtms(response.data);
       setLastRefresh(new Date());
     } catch (error) {
-      console.error('Error fetching ATMs:', error);
+      console.error('Error fetching ATMs locally, using fallback route:', error);
       try {
         const fallbackResponse = await axios.get(`${BACKEND_URL}/api/atms/all`);
-        setAtms(fallbackResponse.data);
+        // Force the strict 1km (1000m) rule on the frontend if the geospatial backend route fails
+        const strictFilteredATMs = fallbackResponse.data
+          .map((atm: ATM) => {
+            atm.distance_meters = haversineDistance(
+              userLocation.latitude, 
+              userLocation.longitude, 
+              atm.latitude, 
+              atm.longitude
+            );
+            return atm;
+          })
+          .filter((atm: ATM) => (atm.distance_meters || 0) <= 1000)
+          .sort((a: ATM, b: ATM) => (a.distance_meters || 0) - (b.distance_meters || 0)); // Sort nearest first
+        
+        setAtms(strictFilteredATMs);
         setLastRefresh(new Date());
       } catch (fallbackError) {
         console.error('Fallback fetch failed:', fallbackError);
