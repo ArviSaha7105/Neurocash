@@ -341,19 +341,60 @@ def verify_google_token(credentials: HTTPAuthorizationCredentials = Depends(secu
         raise HTTPException(status_code=401, detail="Could not verify credentials")
 
 @api_router.post("/atms/{atm_id}/report")
-async def report_atm_status(atm_id: str, report: StatusReportCreate, user_id: str = Depends(verify_google_token)):
+class ReportStatusRequest(BaseModel):
+    user_lat: float
+    user_lng: float
+    status: str
+    atm_name: Optional[str] = None
+    atm_vicinity: Optional[str] = None
+    atm_lat: Optional[float] = None
+    atm_lng: Optional[float] = None
+
+@api_router.post("/reports")
+async def report_atm_status(
+    atm_id: str,
+    report: ReportStatusRequest,
+    user_id: str = Depends(verify_google_token) # Must be at the end because of default value
+):
     """
-    Report ATM status. Only allowed if user is within 50m of ATM.
-    TC_02: Geofence validation. Securely authenticated via Google OAuth.
+    Report the status of an ATM (crowdsourced).
     """
     try:
-        # Find the ATM
-        atm = await db.atms.find_one({"id": atm_id})
-        if not atm:
-            raise HTTPException(status_code=404, detail="ATM not found")
+        # Prevent spam (TC_03)
+        one_min_ago = datetime.utcnow() - timedelta(minutes=1)
+        recent_report = await db.status_reports.find_one({
+            "user_id": user_id,
+            "timestamp": {"$gte": one_min_ago}
+        })
         
-        atm_lat = atm["location"]["coordinates"][1]
-        atm_lng = atm["location"]["coordinates"][0]
+        if recent_report:
+            raise HTTPException(
+                status_code=429, 
+                detail="Rate limit exceeded. Please wait 1 minute between reports."
+            )
+            
+        atm = await db.atms.find_one({"id": atm_id})
+        
+        if not atm:
+            # Dynamic ATM Generation (Global Crowdsourced Mode)
+            if not report.atm_name or report.atm_lat is None or report.atm_lng is None:
+                raise HTTPException(status_code=404, detail="ATM not found in database, and missing dynamic creation metadata (name, lat, lng).")
+            
+            new_atm = ATM(
+                id=atm_id,
+                bank_name=report.atm_name,
+                branch_name=report.atm_vicinity or "Crowdsourced Location",
+                address=report.atm_vicinity or "Sourced from Google Maps",
+                location=Location(coordinates=[report.atm_lng, report.atm_lat]),
+                region="Global",
+                current_status="grey"
+            )
+            await db.atms.insert_one(new_atm.dict())
+            atm_lat = report.atm_lat
+            atm_lng = report.atm_lng
+        else:
+            atm_lat = atm["location"]["coordinates"][1]
+            atm_lng = atm["location"]["coordinates"][0]
         
         # TC_02: Geofence validation - must be within 50 meters
         distance = haversine_distance(report.user_lat, report.user_lng, atm_lat, atm_lng)

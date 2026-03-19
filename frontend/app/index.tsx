@@ -276,7 +276,36 @@ export default function NeuroCashApp() {
     
     let finalAtms: ATM[] = [];
 
+    // GOOGLE PLACES API FETCH
+    const GOOGLE_API_KEY = "AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k";
+    const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=1000&type=atm&key=${GOOGLE_API_KEY}`;
+    
+    let googleAtms: ATM[] = [];
     try {
+      const placesResponse = await axios.get(placesUrl);
+      if (placesResponse.data.results) {
+        googleAtms = placesResponse.data.results.map((place: any) => ({
+          id: place.place_id,
+          bank_name: place.name || 'ATM',
+          branch_name: place.vicinity || 'Local Node',
+          address: place.vicinity || 'Extracted via Google Maps',
+          latitude: place.geometry.location.lat,
+          longitude: place.geometry.location.lng,
+          current_status: 'grey', // Default until actively crowd-sourced
+          bank_online: true,
+          last_report_time: null,
+          distance_meters: haversineDistance(
+            userLocation.latitude, userLocation.longitude, 
+            place.geometry.location.lat, place.geometry.location.lng
+          )
+        }));
+      }
+    } catch (err) {
+      console.error("Google Places API Fetch Failed", err);
+    }
+
+    try {
+      // Sync with our NeuroCash Backend for Live Crowd-Sourced Statuses
       const response = await axios.get(`${BACKEND_URL}/api/atms/nearby`, {
         params: {
           lat: userLocation.latitude,
@@ -284,48 +313,22 @@ export default function NeuroCashApp() {
           radius: 1000, 
         },
       });
-      finalAtms = response.data;
+      const backendAtms = response.data;
+      
+      // Merge Google real locations with precise user liquidity reports!
+      finalAtms = googleAtms.map(gAtm => {
+         const bAtm = backendAtms.find((b: any) => b.id === gAtm.id);
+         if (bAtm) {
+             return { ...gAtm, current_status: bAtm.current_status, last_report_time: bAtm.last_report_time };
+         }
+         return gAtm;
+      });
     } catch (error) {
-      console.error('Error fetching ATMs locally, using fallback route:', error);
-      try {
-        const fallbackResponse = await axios.get(`${BACKEND_URL}/api/atms/all`);
-        // Force the strict 1km (1000m) rule on the frontend if the geospatial backend route fails
-        finalAtms = fallbackResponse.data
-          .map((atm: ATM) => {
-            atm.distance_meters = haversineDistance(
-              userLocation.latitude, 
-              userLocation.longitude, 
-              atm.latitude, 
-              atm.longitude
-            );
-            return atm;
-          })
-          .filter((atm: ATM) => (atm.distance_meters || 0) <= 1000)
-          .sort((a: ATM, b: ATM) => (a.distance_meters || 0) - (b.distance_meters || 0)); 
-      } catch (fallbackError) {
-        console.error('Fallback fetch failed:', fallbackError);
-      }
+      console.error('Error fetching crowdsourced ATMs from backend, defaulting to raw Google Maps state:', error);
+      finalAtms = googleAtms;
     } finally {
-      // GUARANTEED MVP DEMO LOGIC:
-      // If the API completely failed (500 Error) OR if the user is in a remote city with exactly 0 ATMs in 1km:
-      // We magically generate 2 perfect mock ATMs right next to them so the UI MVP never looks broken.
-      if (finalAtms.length === 0) {
-        console.log("Injecting Guaranteed Mock ATMs for MVP test.");
-        finalAtms = [
-          {
-            id: `demo-1-${Date.now()}`, bank_name: 'Global Mock Bank', branch_name: 'Alpha Node',
-            address: 'Demo Location A', latitude: userLocation.latitude + 0.0015, longitude: userLocation.longitude + 0.0015,
-            current_status: 'green', bank_online: true, last_report_time: null,
-            distance_meters: haversineDistance(userLocation.latitude, userLocation.longitude, userLocation.latitude + 0.0015, userLocation.longitude + 0.0015)
-          },
-          {
-            id: `demo-2-${Date.now()}`, bank_name: 'NeuroCash Vault', branch_name: 'Beta Hub',
-            address: 'Demo Location B', latitude: userLocation.latitude - 0.002, longitude: userLocation.longitude - 0.001,
-            current_status: 'yellow', bank_online: true, last_report_time: null,
-            distance_meters: haversineDistance(userLocation.latitude, userLocation.longitude, userLocation.latitude - 0.002, userLocation.longitude - 0.001)
-          }
-        ];
-      }
+      // Strictly sort the absolute real Google Maps ATMs nearest to furthest
+      finalAtms.sort((a, b) => (a.distance_meters || 0) - (b.distance_meters || 0));
       
       setAtms(finalAtms);
       setLastRefresh(new Date());
@@ -395,13 +398,16 @@ export default function NeuroCashApp() {
     try {
       const token = await AsyncStorage.getItem('googleToken');
 
-      await axios.post(`${BACKEND_URL}/api/atms/${selectedATM.id}/report`, {
-        atm_id: selectedATM.id,
-        user_id: "google_verified_user",
-        status,
+      await axios.post(`${BACKEND_URL}/api/reports`, {
         user_lat: userLocation.latitude,
         user_lng: userLocation.longitude,
+        status,
+        atm_name: selectedATM.bank_name,
+        atm_vicinity: selectedATM.branch_name,
+        atm_lat: selectedATM.latitude,
+        atm_lng: selectedATM.longitude
       }, {
+        params: { atm_id: selectedATM.id },
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
