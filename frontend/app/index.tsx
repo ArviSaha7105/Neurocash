@@ -117,6 +117,7 @@ export default function NeuroCashApp() {
   });
 
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [locationName, setLocationName] = useState<string>("Locating...");
   const [atms, setAtms] = useState<ATM[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedATM, setSelectedATM] = useState<ATM | null>(null);
@@ -233,6 +234,30 @@ export default function NeuroCashApp() {
       );
     }
   }, [fetchLocationWithPermission]);
+
+  // Reverse Geocode user location for human readability
+  useEffect(() => {
+    const fetchLocationName = async () => {
+      if (!userLocation) return;
+      try {
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        });
+        if (geocode.length > 0) {
+          const place = geocode[0];
+          const name = place.district || place.city || place.subregion || place.region || 'Unknown Location';
+          const shortName = place.name && place.name !== name ? `${place.name}, ${name}` : name;
+          setLocationName(shortName);
+        } else {
+          setLocationName("Location Name Unavailable");
+        }
+      } catch (error) {
+        setLocationName(`${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`);
+      }
+    };
+    fetchLocationName();
+  }, [userLocation?.latitude, userLocation?.longitude]);
 
   // Start live location tracking
   useEffect(() => {
@@ -563,7 +588,7 @@ export default function NeuroCashApp() {
                 height="100%"
                 frameBorder="0"
                 style={{ border: 0 }}
-                src={`https://www.google.com/maps/embed/v1/view?key=AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k&center=${userLocation.latitude},${userLocation.longitude}&zoom=14`}
+                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k&q=${userLocation.latitude},${userLocation.longitude}&zoom=14`}
                 allowFullScreen
               ></iframe>
             ) : MapView ? (
@@ -578,6 +603,15 @@ export default function NeuroCashApp() {
                 }}
                 showsUserLocation={true}
               >
+                {/* Explicit Marker for User Location */}
+                <Marker
+                  coordinate={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
+                  title="You"
+                  description="Your present location"
+                  pinColor="#4F46E5"
+                  zIndex={999}
+                />
+                
                 {atms.map((atm) => (
                   <Marker
                     key={atm.id}
@@ -720,7 +754,7 @@ export default function NeuroCashApp() {
       <View style={styles.locationBar}>
         <Ionicons name="location" size={16} color="#4F46E5" />
         <Text style={styles.locationText}>
-          {userLocation.latitude.toFixed(4)}, {userLocation.longitude.toFixed(4)}
+          {locationName}
         </Text>
         <View style={styles.locationDivider} />
         <Text style={styles.locationText}>1km radius</Text>
