@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 import requests
@@ -64,6 +64,11 @@ class ATMResponse(BaseModel):
     last_report_time: Optional[datetime]
     distance_meters: Optional[float] = None
 
+class User(BaseModel):
+    id: str
+    karma_score: float = 1.0
+    report_count: int = 0
+
 class StatusReport(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     atm_id: str
@@ -72,6 +77,7 @@ class StatusReport(BaseModel):
     user_lat: float
     user_lng: float
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    scored: bool = False
 
 class StatusReportCreate(BaseModel):
     atm_id: str
@@ -89,6 +95,51 @@ class BankGatewayStatus(BaseModel):
     status: str  # "ONLINE", "OFFLINE"
 
 # ==================== UTILITY FUNCTIONS ====================
+
+async def process_karma_updates(atm_id: str, new_status: Optional[str] = None):
+    """Background task to update user karma scores based on verified ATM status."""
+    atm = await db.atms.find_one({"id": atm_id})
+    if not atm:
+        return
+        
+    true_status = "red" if not atm.get("bank_online", True) else (new_status or await calculate_atm_status(atm_id))
+    
+    # Process unscored reports from the last 2 hours
+    two_hours_ago = datetime.utcnow() - timedelta(hours=2)
+    unscored_reports = await db.status_reports.find({
+        "atm_id": atm_id,
+        "scored": {"$ne": True},
+        "timestamp": {"$gte": two_hours_ago}
+    }).to_list(100)
+    
+    for report in unscored_reports:
+        user_id = report["user_id"]
+        reported_status = report.get("status", "")
+        
+        user = await db.users.find_one({"id": user_id})
+        current_karma = user.get("karma_score", 1.0) if user else 1.0
+        current_count = user.get("report_count", 0) if user else 0
+        
+        karma_change = 0.0
+        if reported_status == true_status:
+            karma_change = 0.1
+        else:
+            karma_change = -0.2
+            
+        new_karma = max(0.1, round(current_karma + karma_change, 2))
+        
+        # Update user
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {"karma_score": new_karma, "report_count": current_count + 1}},
+            upsert=True
+        )
+        
+        # Mark report as scored
+        await db.status_reports.update_one(
+            {"id": report["id"]},
+            {"$set": {"scored": True}}
+        )
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate the Haversine distance between two points in meters."""
@@ -129,7 +180,9 @@ async def calculate_atm_status(atm_id: str) -> str:
     for report in reports:
         status = report.get("status", "")
         if status in status_counts:
-            status_counts[status] += 1
+            user = await db.users.find_one({"id": report["user_id"]})
+            karma_weight = user.get("karma_score", 1.0) if user else 1.0
+            status_counts[status] += karma_weight
     
     total_reports = sum(status_counts.values())
     if total_reports == 0:
@@ -354,6 +407,7 @@ class ReportStatusRequest(BaseModel):
 async def report_atm_status(
     atm_id: str,
     report: ReportStatusRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(verify_google_token) # Must be at the end because of default value
 ):
     """
@@ -433,6 +487,9 @@ async def report_atm_status(
         # Calculate new status
         new_status = await calculate_atm_status(atm_id)
         
+        # Queue karma processing
+        background_tasks.add_task(process_karma_updates, atm_id, new_status)
+        
         return {
             "message": "Status reported successfully",
             "report_id": status_report.id,
@@ -492,7 +549,7 @@ async def get_atm_status(atm_id: str):
 
 # TC_04: Mock Bank Gateway
 @api_router.post("/bank/gateway/status")
-async def set_bank_gateway_status(gateway_status: BankGatewayStatus):
+async def set_bank_gateway_status(gateway_status: BankGatewayStatus, background_tasks: BackgroundTasks):
     """
     Mock bank gateway to simulate bank server downtime.
     When status is OFFLINE, all ATMs of that bank turn RED.
@@ -505,6 +562,12 @@ async def set_bank_gateway_status(gateway_status: BankGatewayStatus):
             {"bank_name": gateway_status.bank_name},
             {"$set": {"bank_online": is_online}}
         )
+        
+        if not is_online:
+            # Trigger karma update for all ATMs of this bank where status just changed to red
+            atms = await db.atms.find({"bank_name": gateway_status.bank_name}).to_list(100)
+            for atm in atms:
+                background_tasks.add_task(process_karma_updates, atm["id"], "red")
         
         return {
             "message": f"Bank gateway status updated",
@@ -552,6 +615,30 @@ async def delete_user_history(user_id: str = Query(..., description="User ID for
         }
     except Exception as e:
         logger.error(f"Error deleting user history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/user/profile")
+async def get_user_profile(user_id: str = Depends(verify_google_token)):
+    """Get the user's profile including karma score."""
+    try:
+        user = await db.users.find_one({"id": user_id})
+        karma_score = user.get("karma_score", 1.0) if user else 1.0
+        report_count = user.get("report_count", 0) if user else 0
+        
+        level = "Bronze"
+        if karma_score >= 5.0:
+            level = "Gold"
+        elif karma_score >= 2.0:
+            level = "Silver"
+            
+        return {
+            "user_id": user_id,
+            "karma_score": karma_score,
+            "report_count": report_count,
+            "karma_level": level
+        }
+    except Exception as e:
+        logger.error(f"Error getting user profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/user/history")

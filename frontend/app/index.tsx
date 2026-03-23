@@ -128,8 +128,25 @@ export default function NeuroCashApp() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [nearbyATMPrompt, setNearbyATMPrompt] = useState<ATM | null>(null);
   const [promptedATMs, setPromptedATMs] = useState<Set<string>>(new Set());
+  const [userKarma, setUserKarma] = useState<number>(1.0);
+  const [userLevel, setUserLevel] = useState<string>('Bronze');
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      if (token) {
+        const response = await axios.get(`${BACKEND_URL}/api/user/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUserKarma(response.data.karma_score);
+        setUserLevel(response.data.karma_level);
+      }
+    } catch (e) {
+      console.log('Error fetching user profile:', e);
+    }
+  };
 
   // Default location: Champadali More, Barasat
   const defaultLocation = {
@@ -147,6 +164,7 @@ export default function NeuroCashApp() {
           
           if (Date.now() - lastLoginTime < fifteenDaysInMs) {
             setIsAuthenticated(true);
+            fetchUserProfile();
           }
         }
       } catch (error) {
@@ -165,6 +183,7 @@ export default function NeuroCashApp() {
       if (authentication?.idToken) AsyncStorage.setItem('googleToken', authentication.idToken);
       AsyncStorage.setItem('lastLoginDate', Date.now().toString());
       setIsAuthenticated(true);
+      fetchUserProfile();
     }
   }, [response]);
 
@@ -276,26 +295,25 @@ export default function NeuroCashApp() {
     
     let finalAtms: ATM[] = [];
 
-    // REAL-WORLD OPENSTREETMAP (OVERPASS API) - 100% Free, No CORS restrictions on Web!
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];node(around:1000,${userLocation.latitude},${userLocation.longitude})[amenity=atm];out;`;
+    // Use Google Maps Places API
+    const googlePlacesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=1000&type=atm&key=AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k`;
     
     let realAtms: ATM[] = [];
     try {
-      const overpassRes = await axios.get(overpassUrl);
-      if (overpassRes.data && overpassRes.data.elements) {
-        realAtms = overpassRes.data.elements.map((node: any) => {
-          const tags = node.tags || {};
+      const placesRes = await axios.get(googlePlacesUrl);
+      if (placesRes.data && placesRes.data.results) {
+        realAtms = placesRes.data.results.map((place: any) => {
           const dist = haversineDistance(
             userLocation.latitude, userLocation.longitude, 
-            node.lat, node.lon
+            place.geometry.location.lat, place.geometry.location.lng
           );
           return {
-            id: `osm-${node.id}`,
-            bank_name: tags.name || tags.operator || tags.network || 'Local ATM',
-            branch_name: tags.branch || 'Street Node',
-            address: `${Math.round(dist)}m away`,
-            latitude: node.lat,
-            longitude: node.lon,
+            id: `google-${place.place_id}`,
+            bank_name: place.name || 'Local ATM',
+            branch_name: place.vicinity || 'Street Node',
+            address: place.vicinity || `${Math.round(dist)}m away`,
+            latitude: place.geometry.location.lat,
+            longitude: place.geometry.location.lng,
             current_status: 'grey', // Default until dynamically crowd-sourced
             bank_online: true,
             last_report_time: null,
@@ -304,7 +322,7 @@ export default function NeuroCashApp() {
         });
       }
     } catch (err) {
-      console.error("Overpass OSM API Fetch Failed", err);
+      console.error("Google Places API Fetch Failed", err);
     }
 
     try {
@@ -794,9 +812,19 @@ export default function NeuroCashApp() {
             <Text style={styles.headerSubtitle}>{atms.length} ATMs nearby</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.refreshButton} onPress={fetchNearbyATMs}>
-          <Ionicons name="refresh" size={22} color="#4F46E5" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <View style={[styles.karmaBadge, 
+            userLevel === 'Gold' ? styles.karmaGold : 
+            userLevel === 'Silver' ? styles.karmaSilver : 
+            styles.karmaBronze
+          ]}>
+            <Ionicons name="star" size={12} color="#FFF" />
+            <Text style={styles.karmaText}>{userLevel} ({userKarma.toFixed(1)})</Text>
+          </View>
+          <TouchableOpacity style={styles.refreshButton} onPress={fetchNearbyATMs}>
+            <Ionicons name="refresh" size={22} color="#4F46E5" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Location Bar */}
@@ -858,6 +886,12 @@ const styles = StyleSheet.create({
   logoContainer: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1F2937' },
   headerSubtitle: { fontSize: 12, color: '#6B7280' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  karmaBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  karmaGold: { backgroundColor: '#F59E0B' },
+  karmaSilver: { backgroundColor: '#9CA3AF' },
+  karmaBronze: { backgroundColor: '#B45309' },
+  karmaText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   refreshButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center' },
   locationBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, backgroundColor: '#EEF2FF' },
   locationText: { fontSize: 12, color: '#4F46E5', marginLeft: 4, fontWeight: '500' },
