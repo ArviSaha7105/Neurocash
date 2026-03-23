@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -821,6 +822,9 @@ export default function NeuroCashApp() {
             <Ionicons name="star" size={12} color="#FFF" />
             <Text style={styles.karmaText}>{userLevel} ({userKarma.toFixed(1)})</Text>
           </View>
+          <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileButton}>
+            <Ionicons name="person-circle" size={28} color="#4F46E5" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.refreshButton} onPress={fetchNearbyATMs}>
             <Ionicons name="refresh" size={22} color="#4F46E5" />
           </TouchableOpacity>
@@ -887,6 +891,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1F2937' },
   headerSubtitle: { fontSize: 12, color: '#6B7280' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  profileButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEF2FF', borderRadius: 20 },
   karmaBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
   karmaGold: { backgroundColor: '#F59E0B' },
   karmaSilver: { backgroundColor: '#9CA3AF' },

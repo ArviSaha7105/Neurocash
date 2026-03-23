@@ -650,10 +650,16 @@ async def get_user_history(user_id: str = Query(..., description="User ID")):
         # Format reports to be JSON serializable
         formatted_reports = []
         for report in reports:
+            atm = await db.atms.find_one({"id": report.get("atm_id")})
+            atm_name = atm.get("bank_name", "Unknown ATM") if atm else "Unknown ATM"
+            atm_vicinity = atm.get("branch_name", "") if atm else ""
+            
             # Remove MongoDB _id field and format datetime
             formatted_report = {
                 "id": report.get("id", ""),
                 "atm_id": report.get("atm_id", ""),
+                "atm_name": atm_name,
+                "atm_vicinity": atm_vicinity,
                 "user_id": report.get("user_id", ""),
                 "status": report.get("status", ""),
                 "user_lat": report.get("user_lat", 0.0),
