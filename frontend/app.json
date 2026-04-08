@@ -13,6 +13,9 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Find ATMs near you with cash availability",
         "NSLocationAlwaysUsageDescription": "Get ATM cash alerts in your area"
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -23,6 +26,8 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
       ],
       "config": {
@@ -30,7 +35,8 @@
           "apiKey": "AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k"
         }
       },
-      "package": "com.arityasaha.neurocash"
+      "package": "com.arityasaha.neurocash",
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "bundler": "metro",
@@ -57,6 +63,9 @@
       "eas": {
         "projectId": "794845ae-6b8f-42b7-ad6a-bd32c8f2f53f"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/794845ae-6b8f-42b7-ad6a-bd32c8f2f53f"
     }
   }
 }
