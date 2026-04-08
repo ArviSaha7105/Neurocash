@@ -53,33 +53,15 @@ export default function ProfileScreen() {
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
-        const token = await AsyncStorage.getItem('googleToken');
-        if (!token) {
-          setLoading(false);
-          return;
-        }
-
-        const [profileRes, historyRes] = await Promise.all([
-          axios.get(`${BACKEND_URL}/api/user/profile`, {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          axios.get(`${BACKEND_URL}/api/user/history`, {
-            params: { user_id: 'me' }, // The backend requires user_id param for history, but our verify_google_token actually uses the token's sub. Wait, the endpoint uses user_id: str = Query(...)
-            headers: { Authorization: `Bearer ${token}` }
-          }).catch(() => null)
-        ]);
-
-        if (profileRes.data) {
-          setProfile(profileRes.data);
-          // Fetch history properly using the user_id returned by profile
-          const user_id = profileRes.data.user_id;
-          const histRes = await axios.get(`${BACKEND_URL}/api/user/history`, {
-            params: { user_id }
-          });
-          if (histRes.data && histRes.data.reports) {
-            setHistory(histRes.data.reports.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-          }
-        }
+        // MVP: Provide mock profile since Google Auth is removed
+        setProfile({
+          user_id: 'guest_user_123',
+          karma_score: 1.0,
+          report_count: 0,
+          karma_level: 'Bronze'
+        });
+        setHistory([]);
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching profile:', error);
       } finally {

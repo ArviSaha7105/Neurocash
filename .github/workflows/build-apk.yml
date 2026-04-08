@@ -1,0 +1,42 @@
+name: Build Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci || npm install
+
+      - name: Expo Prebuild
+        working-directory: ./frontend
+        run: npx --yes expo prebuild --platform android --clean
+
+      - name: Build APK
+        working-directory: ./frontend/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neurocash-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk

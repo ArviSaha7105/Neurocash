@@ -18,11 +18,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri } from 'expo-auth-session';
-
-WebBrowser.maybeCompleteAuthSession();
+// Auth bypassed for MVP
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://neurocash.vercel.app";
 const { width, height } = Dimensions.get('window');
@@ -100,22 +96,9 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export default function NeuroCashApp() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-
-  const redirectUri = isWeb 
-    ? (typeof window !== 'undefined' ? window.location.origin : 'https://neurocash.vercel.app')
-    : makeRedirectUri({ scheme: 'neurocash' });
-  
-  console.log("REQUIRED GOOGLE REDIRECT URI TO WHITELIST:", redirectUri);
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
-    webClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
-    iosClientId: '1062302145281-6aeo5t56mp07pntch2j9o0366516eat1.apps.googleusercontent.com',
-    androidClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com', 
-    redirectUri,
-  });
+  // MVP Auth Bypass
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationName, setLocationName] = useState<string>("Locating...");
@@ -131,8 +114,9 @@ export default function NeuroCashApp() {
   const [promptedATMs, setPromptedATMs] = useState<Set<string>>(new Set());
   const [userKarma, setUserKarma] = useState<number>(1.0);
   const [userLevel, setUserLevel] = useState<string>('Bronze');
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+  const lastFetchLocationRef = useRef<UserLocation | null>(null);
 
   const fetchUserProfile = async () => {
     try {
@@ -156,37 +140,8 @@ export default function NeuroCashApp() {
   };
 
   useEffect(() => {
-    const checkLoginStatus = async () => {
-      try {
-        const lastLoginStr = await AsyncStorage.getItem('lastLoginDate');
-        if (lastLoginStr) {
-          const lastLoginTime = parseInt(lastLoginStr, 10);
-          const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
-          
-          if (Date.now() - lastLoginTime < fifteenDaysInMs) {
-            setIsAuthenticated(true);
-            fetchUserProfile();
-          }
-        }
-      } catch (error) {
-        console.log('Error checking auth', error);
-      } finally {
-        setIsAuthLoading(false);
-      }
-    };
-    checkLoginStatus();
+    fetchUserProfile();
   }, []);
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { authentication } = response;
-      if (authentication?.accessToken) AsyncStorage.setItem('googleToken', authentication.accessToken);
-      if (authentication?.idToken) AsyncStorage.setItem('googleToken', authentication.idToken);
-      AsyncStorage.setItem('lastLoginDate', Date.now().toString());
-      setIsAuthenticated(true);
-      fetchUserProfile();
-    }
-  }, [response]);
 
   const fetchLocationWithPermission = useCallback(async () => {
     try {
@@ -291,19 +246,41 @@ export default function NeuroCashApp() {
   }, [askForLocationPermission]);
 
   // Fetch nearby ATMs
-  const fetchNearbyATMs = useCallback(async () => {
+  const fetchNearbyATMs = useCallback(async (force = false) => {
     if (!userLocation) return;
+    
+    // Throttle API requests: only fetch if forced or moved > 200m
+    if (!force && lastFetchLocationRef.current) {
+      const dist = haversineDistance(
+        userLocation.latitude, userLocation.longitude,
+        lastFetchLocationRef.current.latitude, lastFetchLocationRef.current.longitude
+      );
+      if (dist < 200) return;
+    }
+    lastFetchLocationRef.current = userLocation;
     
     let finalAtms: ATM[] = [];
 
-    // Use Google Maps Places API
+    // Use Google Maps Places API and Backend in parallel
     const googlePlacesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=1000&type=atm&key=AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k`;
     
     let realAtms: ATM[] = [];
+    let backendAtms: any[] = [];
+    
     try {
-      const placesRes = await axios.get(googlePlacesUrl);
-      if (placesRes.data && placesRes.data.results) {
-        realAtms = placesRes.data.results.map((place: any) => {
+      const [placesRes, backendRes] = await Promise.allSettled([
+        axios.get(googlePlacesUrl),
+        axios.get(`${BACKEND_URL}/api/atms/nearby`, {
+          params: {
+            lat: userLocation.latitude,
+            lng: userLocation.longitude,
+            radius: 1000, 
+          },
+        })
+      ]);
+
+      if (placesRes.status === 'fulfilled' && placesRes.value.data && placesRes.value.data.results) {
+        realAtms = placesRes.value.data.results.map((place: any) => {
           const dist = haversineDistance(
             userLocation.latitude, userLocation.longitude, 
             place.geometry.location.lat, place.geometry.location.lng
@@ -315,27 +292,21 @@ export default function NeuroCashApp() {
             address: place.vicinity || `${Math.round(dist)}m away`,
             latitude: place.geometry.location.lat,
             longitude: place.geometry.location.lng,
-            current_status: 'grey', // Default until dynamically crowd-sourced
+            current_status: 'grey',
             bank_online: true,
             last_report_time: null,
             distance_meters: dist
           };
         });
+      } else if (placesRes.status === 'rejected') {
+        console.error("Google Places API Fetch Failed", placesRes.reason);
       }
-    } catch (err) {
-      console.error("Google Places API Fetch Failed", err);
-    }
 
-    try {
-      // Sync with our NeuroCash Backend for Live Crowd-Sourced Statuses
-      const response = await axios.get(`${BACKEND_URL}/api/atms/nearby`, {
-        params: {
-          lat: userLocation.latitude,
-          lng: userLocation.longitude,
-          radius: 1000, 
-        },
-      });
-      const backendAtms = response.data;
+      if (backendRes.status === 'fulfilled') {
+        backendAtms = backendRes.value.data;
+      } else {
+        console.error('Error fetching crowdsourced statuses from backend (Vercel offline?)');
+      }
       
       // Merge OpenStreetMap real physical locations with exact user liquidity reports!
       finalAtms = realAtms.map(rAtm => {
@@ -346,7 +317,7 @@ export default function NeuroCashApp() {
          return rAtm;
       });
     } catch (error) {
-      console.error('Error fetching crowdsourced statuses from backend (Vercel offline?), defaulting to raw OSM state:', error);
+      console.error('Unexpected error fetching ATMs:', error);
       finalAtms = realAtms;
     } finally {
       // GUARANTEED FALLBACK: If the user lives in a perfectly remote area with exactly ZERO real OSM ATMs in their 1km!
@@ -380,10 +351,15 @@ export default function NeuroCashApp() {
   // Initial fetch and 30-second polling
   useEffect(() => {
     if (userLocation) {
-      fetchNearbyATMs();
+      // Pass force=false on movement updates, won't blindly refetch if <200m
+      fetchNearbyATMs(false);
 
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+      }
+      
       pollingInterval.current = setInterval(() => {
-        fetchNearbyATMs();
+        fetchNearbyATMs(true); // force fetch on interval
       }, 30000);
 
       return () => {
@@ -457,7 +433,7 @@ export default function NeuroCashApp() {
       }
       setReportModalVisible(false);
       setNearbyATMPrompt(null);
-      fetchNearbyATMs();
+      fetchNearbyATMs(true); // Force update on report
     } catch (error: any) {
       const errorMsg = error.response?.data?.detail || 'Failed to submit report.';
       if (!isWeb) {
@@ -777,28 +753,7 @@ export default function NeuroCashApp() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <SafeAreaView style={styles.authContainer}>
-        <View style={styles.authContent}>
-          <View style={styles.authIconContainer}>
-            <Ionicons name="shield-checkmark" size={64} color="#4F46E5" />
-          </View>
-          <Text style={styles.authTitle}>Welcome to NeuroCash</Text>
-          <Text style={styles.authSubtitle}>Please sign in to view real-time ATM liquidity securely.</Text>
-          
-          <TouchableOpacity 
-             style={[styles.googleButton, !request && styles.reportButtonDisabled]} 
-             disabled={!request}
-             onPress={() => promptAsync()}
-          >
-            <Ionicons name="logo-google" size={24} color="#FFF" />
-            <Text style={styles.googleButtonText}>Sign in with Google</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // Auth screen removed for MVP
 
   return (
     <SafeAreaView style={styles.container}>
@@ -825,7 +780,7 @@ export default function NeuroCashApp() {
           <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileButton}>
             <Ionicons name="person-circle" size={28} color="#4F46E5" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.refreshButton} onPress={fetchNearbyATMs}>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => fetchNearbyATMs(true)}>
             <Ionicons name="refresh" size={22} color="#4F46E5" />
           </TouchableOpacity>
         </View>
