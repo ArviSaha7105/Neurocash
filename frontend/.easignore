@@ -1,0 +1,8 @@
+node_modules/
+.expo/
+dist/
+android/
+ios/
+.metro-cache/
+eas-builds*
+build.log

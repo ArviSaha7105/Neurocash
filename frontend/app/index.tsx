@@ -258,92 +258,36 @@ export default function NeuroCashApp() {
       if (dist < 200) return;
     }
     lastFetchLocationRef.current = userLocation;
-    
-    let finalAtms: ATM[] = [];
-
-    // Use Google Maps Places API and Backend in parallel
-    const googlePlacesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${userLocation.latitude},${userLocation.longitude}&radius=1000&type=atm&key=AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k`;
-    
-    let realAtms: ATM[] = [];
-    let backendAtms: any[] = [];
+    setLoading(true);
     
     try {
-      const [placesRes, backendRes] = await Promise.allSettled([
-        axios.get(googlePlacesUrl),
-        axios.get(`${BACKEND_URL}/api/atms/nearby`, {
-          params: {
-            lat: userLocation.latitude,
-            lng: userLocation.longitude,
-            radius: 1000, 
-          },
-        })
-      ]);
-
-      if (placesRes.status === 'fulfilled' && placesRes.value.data && placesRes.value.data.results) {
-        realAtms = placesRes.value.data.results.map((place: any) => {
-          const dist = haversineDistance(
-            userLocation.latitude, userLocation.longitude, 
-            place.geometry.location.lat, place.geometry.location.lng
-          );
-          return {
-            id: `google-${place.place_id}`,
-            bank_name: place.name || 'Local ATM',
-            branch_name: place.vicinity || 'Street Node',
-            address: place.vicinity || `${Math.round(dist)}m away`,
-            latitude: place.geometry.location.lat,
-            longitude: place.geometry.location.lng,
-            current_status: 'grey',
-            bank_online: true,
-            last_report_time: null,
-            distance_meters: dist
-          };
-        });
-      } else if (placesRes.status === 'rejected') {
-        console.error("Google Places API Fetch Failed", placesRes.reason);
-      }
-
-      if (backendRes.status === 'fulfilled') {
-        backendAtms = backendRes.value.data;
-      } else {
-        console.error('Error fetching crowdsourced statuses from backend (Vercel offline?)');
-      }
-      
-      // Merge OpenStreetMap real physical locations with exact user liquidity reports!
-      finalAtms = realAtms.map(rAtm => {
-         const bAtm = backendAtms.find((b: any) => b.id === rAtm.id);
-         if (bAtm) {
-             return { ...rAtm, current_status: bAtm.current_status, last_report_time: bAtm.last_report_time };
-         }
-         return rAtm;
+      const response = await axios.get(`${BACKEND_URL}/api/atms/nearby`, {
+        params: {
+          lat: userLocation.latitude,
+          lng: userLocation.longitude,
+          radius: 1000, 
+        },
       });
-    } catch (error) {
-      console.error('Unexpected error fetching ATMs:', error);
-      finalAtms = realAtms;
-    } finally {
-      // GUARANTEED FALLBACK: If the user lives in a perfectly remote area with exactly ZERO real OSM ATMs in their 1km!
-      if (finalAtms.length === 0) {
-        console.log("No real OSM ATMs found in 1km radius! Injecting Universal Demos.");
-        finalAtms = [
-          {
-            id: `demo-1-${Date.now()}`, bank_name: 'Global Mock Bank', branch_name: 'Alpha Node',
-            address: 'Demo Location A', latitude: userLocation.latitude + 0.0015, longitude: userLocation.longitude + 0.0015,
-            current_status: 'green', bank_online: true, last_report_time: null,
-            distance_meters: haversineDistance(userLocation.latitude, userLocation.longitude, userLocation.latitude + 0.0015, userLocation.longitude + 0.0015)
-          },
-          {
-            id: `demo-2-${Date.now()}`, bank_name: 'NeuroCash Vault', branch_name: 'Beta Hub',
-            address: 'Demo Location B', latitude: userLocation.latitude - 0.002, longitude: userLocation.longitude - 0.001,
-            current_status: 'yellow', bank_online: true, last_report_time: null,
-            distance_meters: haversineDistance(userLocation.latitude, userLocation.longitude, userLocation.latitude - 0.002, userLocation.longitude - 0.001)
-          }
-        ];
-      }
 
-      // Strictly sort the absolute real (or mock) ATMs nearest to furthest
-      finalAtms.sort((a, b) => (a.distance_meters || 0) - (b.distance_meters || 0));
+      const fetchedAtms = response.data.map((atm: any) => ({
+        ...atm,
+        distance_meters: atm.distance_meters || haversineDistance(
+          userLocation.latitude, userLocation.longitude,
+          atm.latitude, atm.longitude
+        )
+      }));
+
+      // Strictly sort the real ATMs nearest to furthest
+      fetchedAtms.sort((a: any, b: any) => (a.distance_meters || 0) - (b.distance_meters || 0));
       
-      setAtms(finalAtms);
+      setAtms(fetchedAtms);
       setLastRefresh(new Date());
+    } catch (error) {
+      console.error('Error fetching ATMs from backend:', error);
+      if (!isWeb) {
+        Alert.alert('Error', 'Could not fetch ATMs. Please check your connection.');
+      }
+    } finally {
       setLoading(false);
     }
   }, [userLocation]);

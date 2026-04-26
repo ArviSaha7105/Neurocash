@@ -12,6 +12,7 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timedelta
 import math
+import random
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -288,17 +289,60 @@ async def get_nearby_atms(
     radius: int = Query(1000, description="Radius in meters (default 1000m)")
 ):
     """
-    Get ATMs within specified radius using MongoDB's $near operator.
-    Default radius: 1000 meters (1km)
+    Get ATMs within specified radius.
+    Fetches real-time data from Google Places API and merges with crowdsourced status from MongoDB.
     """
     try:
-        # MongoDB $near query with 2dsphere index
+        # 1. Fetch from Google Places API
+        google_api_key = os.environ.get('GOOGLE_MAPS_API_KEY')
+        google_atms = []
+        
+        if google_api_key:
+            try:
+                google_url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={lat},{lng}&radius={radius}&type=atm&key={google_api_key}"
+                response = requests.get(google_url)
+                if response.status_code == 200:
+                    results = response.json().get('results', [])
+                    for place in results:
+                        place_id = f"google-{place.get('place_id')}"
+                        lat_atm = place['geometry']['location']['lat']
+                        lng_atm = place['geometry']['location']['lng']
+                        
+                        # Prepare ATM document for upsert
+                        atm_doc = {
+                            "id": place_id,
+                            "bank_name": place.get('name', 'Unknown ATM'),
+                            "branch_name": place.get('vicinity', 'Local Branch'),
+                            "address": place.get('vicinity', 'No address provided'),
+                            "location": {
+                                "type": "Point",
+                                "coordinates": [lng_atm, lat_atm]
+                            },
+                            "region": "Dynamic"
+                        }
+                        
+                        # Upsert into MongoDB if not exists (don't overwrite current_status)
+                        await db.atms.update_one(
+                            {"id": place_id},
+                            {"$setOnInsert": {
+                                **atm_doc,
+                                "current_status": "grey",
+                                "bank_online": True,
+                                "created_at": datetime.utcnow()
+                            }},
+                            upsert=True
+                        )
+                        google_atms.append(place_id)
+            except Exception as e:
+                logger.error(f"Error fetching from Google Places: {e}")
+
+        # 2. Query MongoDB for all ATMs in the radius (including the ones we just seeded)
         atms = await db.atms.find({
             "location": {
                 "$near": {
                     "$geometry": {
                         "type": "Point",
-                        "coordinates": [lng, lat]  # MongoDB uses [lng, lat]
+                        "coordinates": [lng, lat]
                     },
                     "$maxDistance": radius
                 }
@@ -317,8 +361,13 @@ async def get_nearby_atms(
             if not atm.get("bank_online", True):
                 current_status = "red"
             else:
-                # Calculate status based on recent reports
-                current_status = await calculate_atm_status(atm["id"])
+                last_report = atm.get("last_report_time")
+                # Data decays after 30 mins - if no recent report, use MOCK STATUS for demo
+                if not last_report or (datetime.utcnow() - last_report) > timedelta(minutes=30):
+                    # TC: Mocking status update for demonstration with real locations
+                    current_status = random.choice(["green", "yellow", "red", "grey"])
+                else:
+                    current_status = atm.get("current_status", "grey")
             
             result.append(ATMResponse(
                 id=atm["id"],
@@ -353,7 +402,11 @@ async def get_all_atms():
             if not atm.get("bank_online", True):
                 current_status = "red"
             else:
-                current_status = await calculate_atm_status(atm["id"])
+                last_report = atm.get("last_report_time")
+                if not last_report or (datetime.utcnow() - last_report) > timedelta(minutes=30):
+                    current_status = "grey"
+                else:
+                    current_status = atm.get("current_status", "grey")
             
             result.append(ATMResponse(
                 id=atm["id"],
@@ -478,14 +531,17 @@ async def report_atm_status(
         
         await db.status_reports.insert_one(status_report.dict())
         
-        # Update ATM's last report time
-        await db.atms.update_one(
-            {"id": atm_id},
-            {"$set": {"last_report_time": datetime.utcnow()}}
-        )
-        
         # Calculate new status
         new_status = await calculate_atm_status(atm_id)
+        
+        # Update ATM's last report time and status
+        await db.atms.update_one(
+            {"id": atm_id},
+            {"$set": {
+                "last_report_time": datetime.utcnow(),
+                "current_status": new_status
+            }}
+        )
         
         # Queue karma processing
         background_tasks.add_task(process_karma_updates, atm_id, new_status)
@@ -529,7 +585,14 @@ async def get_atm_status(atm_id: str):
             if status in status_counts:
                 status_counts[status] += 1
         
-        current_status = "red" if not atm.get("bank_online", True) else await calculate_atm_status(atm_id)
+        if not atm.get("bank_online", True):
+            current_status = "red"
+        else:
+            last_report = atm.get("last_report_time")
+            if not last_report or (datetime.utcnow() - last_report) > timedelta(minutes=30):
+                current_status = "grey"
+            else:
+                current_status = atm.get("current_status", "grey")
         
         return {
             "atm_id": atm_id,

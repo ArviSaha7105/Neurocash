@@ -1,0 +1,20 @@
+﻿
+Builds for @arityasaha/neurocash:
+
+ID                       ee3d9f9f-2e95-4fd9-87dd-64c9f00b215b
+Platform                 Android
+Status                   in queue
+Profile                  preview
+Distribution             store
+SDK Version              54.0.0
+Runtime Version          1.0.0
+Version                  1.0.0
+Version code             1
+Commit                   10b49c2288b75bf6e30117376237a31ecbbec48f
+Logs                     https://expo.dev/accounts/arityasaha/projects/neurocash/builds/ee3d9f9f-2e95-4fd9-87dd-64c9f00b215b
+Application Archive URL  null
+Build Artifacts URL      null
+Fingerprint              <in progress>
+Started at               9/4/2026, 2:02:39 am
+Finished at              <in progress>
+Started by               arityasaha
