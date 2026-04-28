@@ -53,15 +53,38 @@ export default function ProfileScreen() {
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
-        // MVP: Provide mock profile since Google Auth is removed
-        setProfile({
-          user_id: 'guest_user_123',
-          karma_score: 1.0,
-          report_count: 0,
-          karma_level: 'Bronze'
-        });
-        setHistory([]);
-        setLoading(false);
+        const token = await AsyncStorage.getItem('googleToken');
+        if (token) {
+          const response = await axios.get(`${BACKEND_URL}/api/user/profile`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setProfile({
+            user_id: response.data.user_id || 'user',
+            karma_score: response.data.karma_score || 1.0,
+            report_count: response.data.report_count || 0,
+            karma_level: response.data.karma_level || 'Bronze'
+          });
+          
+          try {
+             const userId = response.data.user_id || 'user';
+             const historyRes = await axios.get(`${BACKEND_URL}/api/user/history?user_id=${userId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+             });
+             setHistory(historyRes.data.reports || []);
+          } catch (e) {
+             console.log("Could not load history", e);
+             setHistory([]);
+          }
+        } else {
+          // MVP fallback
+          setProfile({
+            user_id: 'guest_user_123',
+            karma_score: 1.0,
+            report_count: 0,
+            karma_level: 'Bronze'
+          });
+          setHistory([]);
+        }
       } catch (error) {
         console.error('Error fetching profile:', error);
       } finally {
@@ -71,6 +94,11 @@ export default function ProfileScreen() {
 
     fetchProfileData();
   }, []);
+
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem('googleToken');
+    router.replace('/');
+  };
 
   if (loading) {
     return (
@@ -118,7 +146,9 @@ export default function ProfileScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Profile</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButtonHeader}>
+          <Ionicons name="log-out-outline" size={24} color="#EF4444" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -205,6 +235,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   backButtonHeader: { padding: 4 },
+  logoutButtonHeader: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937' },
   scrollContent: { padding: 16 },
   scoreboardCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3, marginBottom: 24 },

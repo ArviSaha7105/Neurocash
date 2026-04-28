@@ -18,8 +18,10 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// Auth bypassed for MVP
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 
+WebBrowser.maybeCompleteAuthSession();
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://neurocash.vercel.app";
 const { width, height } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -96,9 +98,40 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export default function NeuroCashApp() {
-  // MVP Auth Bypass
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
+    iosClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
+    webClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
+    clientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
+  });
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await AsyncStorage.getItem('googleToken');
+        if (token) {
+          setIsAuthenticated(true);
+        }
+      } catch (e) {
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      if (authentication?.accessToken) {
+        AsyncStorage.setItem('googleToken', authentication.accessToken);
+        setIsAuthenticated(true);
+      }
+    }
+  }, [response]);
 
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationName, setLocationName] = useState<string>("Locating...");
@@ -576,7 +609,54 @@ export default function NeuroCashApp() {
                 height="100%"
                 frameBorder="0"
                 style={{ border: 0 }}
-                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyAxD8kWaXWi3bgATVz2-Iov5DJ8wzSkg9k&q=${userLocation.latitude},${userLocation.longitude}&zoom=14`}
+                srcDoc={`
+                  <!DOCTYPE html>
+                  <html>
+                  <head>
+                      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                      <style>
+                          body { margin: 0; padding: 0; }
+                          #map { width: 100vw; height: 100vh; }
+                      </style>
+                  </head>
+                  <body>
+                      <div id="map"></div>
+                      <script>
+                          var map = L.map('map').setView([${userLocation.latitude}, ${userLocation.longitude}], 14);
+                          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                              attribution: '© OpenStreetMap contributors'
+                          }).addTo(map);
+                          
+                          // User marker
+                          L.marker([${userLocation.latitude}, ${userLocation.longitude}]).addTo(map)
+                              .bindPopup('You are here');
+                  
+                          // ATM markers
+                          var atms = ${JSON.stringify(atms)};
+                          var colors = {
+                              'green': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                              'yellow': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
+                              'red': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                              'grey': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png'
+                          };
+                  
+                          atms.forEach(function(atm) {
+                              var icon = new L.Icon({
+                                  iconUrl: colors[atm.current_status] || colors['grey'],
+                                  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                                  iconSize: [25, 41],
+                                  iconAnchor: [12, 41],
+                                  popupAnchor: [1, -34],
+                                  shadowSize: [41, 41]
+                              });
+                              L.marker([atm.latitude, atm.longitude], {icon: icon}).addTo(map)
+                                  .bindPopup('<b>' + atm.bank_name + '</b><br>' + atm.branch_name + '<br><b>Status:</b> ' + atm.current_status);
+                          });
+                      </script>
+                  </body>
+                  </html>
+                `}
                 allowFullScreen
               ></iframe>
             ) : MapView ? (
@@ -697,7 +777,28 @@ export default function NeuroCashApp() {
     );
   }
 
-  // Auth screen removed for MVP
+  if (!isAuthenticated && !isAuthLoading) {
+    return (
+      <SafeAreaView style={styles.authContainer}>
+        <View style={styles.authContent}>
+          <View style={styles.authIconContainer}>
+            <Ionicons name="cash" size={48} color="#4F46E5" />
+          </View>
+          <Text style={styles.authTitle}>Welcome to NeuroCash</Text>
+          <Text style={styles.authSubtitle}>Find and report ATM liquidity in real-time.</Text>
+          
+          <TouchableOpacity 
+            style={styles.googleButton} 
+            disabled={!request}
+            onPress={() => promptAsync()}
+          >
+            <Ionicons name="logo-google" size={24} color="#FFF" />
+            <Text style={styles.googleButtonText}>Sign in with Google</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>

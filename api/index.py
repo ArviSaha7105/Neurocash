@@ -446,7 +446,6 @@ def verify_google_token(credentials: HTTPAuthorizationCredentials = Depends(secu
         logger.error(f"Token verification error: {e}")
         raise HTTPException(status_code=401, detail="Could not verify credentials")
 
-@api_router.post("/atms/{atm_id}/report")
 class ReportStatusRequest(BaseModel):
     user_lat: float
     user_lng: float
