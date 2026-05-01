@@ -157,7 +157,7 @@ export default function NeuroCashApp() {
   const [userId] = useState(`user_${Date.now()}`);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [nearbyATMPrompt, setNearbyATMPrompt] = useState<ATM | null>(null);
-  const [promptedATMs, setPromptedATMs] = useState<Set<string>>(new Set());
+  const promptedATMsRef = useRef<Set<string>>(new Set());
   const [userKarma, setUserKarma] = useState<number>(1.0);
   const [userLevel, setUserLevel] = useState<string>('Bronze');
   const [userPicture, setUserPicture] = useState<string | null>(null);
@@ -326,6 +326,12 @@ export default function NeuroCashApp() {
   useEffect(() => {
     askForLocationPermission();
 
+    if (isWeb && 'Notification' in window) {
+      if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    }
+
     return () => {
       if (locationSubscription.current) {
         locationSubscription.current.remove();
@@ -376,6 +382,26 @@ export default function NeuroCashApp() {
       setAtms(fetchedAtms);
       setLastRefresh(new Date());
       initialLoadDone.current = true;
+
+      if (fetchedAtms.length > 0) {
+        const closest = fetchedAtms[0];
+        
+        if (closest.distance_meters <= 50 && !promptedATMsRef.current.has(closest.id)) {
+          promptedATMsRef.current.add(closest.id);
+          
+          if (isWeb && 'Notification' in window && Notification.permission === 'granted') {
+            const notif = new Notification("🏦 ATM Nearby!", {
+              body: `You are at ${closest.bank_name}. Report its cash status to earn Karma!`,
+            });
+            notif.onclick = () => { window.focus(); };
+          }
+          
+          setNearbyATMPrompt(closest);
+          
+        } else if (closest.distance_meters > 100) {
+          promptedATMsRef.current.delete(closest.id);
+        }
+      }
     } catch (error) {
       console.error('Error fetching ATMs from backend:', error);
       if (!isWeb) {
