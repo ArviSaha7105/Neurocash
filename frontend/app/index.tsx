@@ -259,17 +259,30 @@ export default function NeuroCashApp() {
     const fetchLocationName = async () => {
       if (!userLocation) return;
       try {
-        const geocode = await Location.reverseGeocodeAsync({
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        });
-        if (geocode.length > 0) {
-          const place = geocode[0];
-          const name = place.district || place.city || place.subregion || place.region || 'Unknown Location';
-          const shortName = place.name && place.name !== name ? `${place.name}, ${name}` : name;
-          setLocationName(shortName);
+        if (isWeb) {
+          // Use OpenStreetMap Nominatim for Web to avoid expo-location API key issues
+          const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${userLocation.latitude}&lon=${userLocation.longitude}&zoom=18&addressdetails=1`);
+          if (res.data && res.data.address) {
+            const addr = res.data.address;
+            const name = addr.neighbourhood || addr.suburb || addr.city_district || addr.city || addr.town || 'Unknown Location';
+            const shortName = addr.road ? `${addr.road}, ${name}` : name;
+            setLocationName(shortName);
+          } else {
+            setLocationName(`${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`);
+          }
         } else {
-          setLocationName("Location Name Unavailable");
+          const geocode = await Location.reverseGeocodeAsync({
+            latitude: userLocation.latitude,
+            longitude: userLocation.longitude,
+          });
+          if (geocode.length > 0) {
+            const place = geocode[0];
+            const name = place.district || place.city || place.subregion || place.region || 'Unknown Location';
+            const shortName = place.name && place.name !== name ? `${place.name}, ${name}` : name;
+            setLocationName(shortName);
+          } else {
+            setLocationName("Location Name Unavailable");
+          }
         }
       } catch (error) {
         setLocationName(`${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`);
@@ -641,7 +654,7 @@ export default function NeuroCashApp() {
                           
                           // User marker
                           L.marker([${userLocation.latitude}, ${userLocation.longitude}]).addTo(map)
-                              .bindPopup('You are here');
+                              .bindPopup('<b>You are here</b><br>${locationName.replace(/'/g, "\\'")}');
                   
                           // ATM markers
                           var atms = ${JSON.stringify(atms)};
@@ -686,7 +699,7 @@ export default function NeuroCashApp() {
                 <Marker
                   coordinate={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
                   title="You"
-                  description="Your present location"
+                  description={locationName}
                   pinColor="#4F46E5"
                   zIndex={999}
                 />
