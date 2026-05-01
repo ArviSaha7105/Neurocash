@@ -333,6 +333,8 @@ export default function NeuroCashApp() {
     };
   }, [askForLocationPermission]);
 
+  const initialLoadDone = useRef(false);
+
   // Fetch nearby ATMs
   const fetchNearbyATMs = useCallback(async (force = false) => {
     if (!userLocation) return;
@@ -346,7 +348,10 @@ export default function NeuroCashApp() {
       if (dist < 200) return;
     }
     lastFetchLocationRef.current = userLocation;
-    setLoading(true);
+    
+    if (!initialLoadDone.current) {
+      setLoading(true);
+    }
     
     try {
       const response = await axios.get(`${BACKEND_URL}/api/atms/nearby`, {
@@ -370,6 +375,7 @@ export default function NeuroCashApp() {
       
       setAtms(fetchedAtms);
       setLastRefresh(new Date());
+      initialLoadDone.current = true;
     } catch (error) {
       console.error('Error fetching ATMs from backend:', error);
       if (!isWeb) {
