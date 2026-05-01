@@ -686,6 +686,8 @@ async def get_user_profile(user_id: str = Depends(verify_google_token)):
         user = await db.users.find_one({"id": user_id})
         karma_score = user.get("karma_score", 1.0) if user else 1.0
         report_count = user.get("report_count", 0) if user else 0
+        name = user.get("name", "Guest") if user else "Guest"
+        picture = user.get("picture", None) if user else None
         
         level = "Bronze"
         if karma_score >= 5.0:
@@ -695,12 +697,36 @@ async def get_user_profile(user_id: str = Depends(verify_google_token)):
             
         return {
             "user_id": user_id,
+            "name": name,
+            "picture": picture,
             "karma_score": karma_score,
             "report_count": report_count,
             "karma_level": level
         }
     except Exception as e:
         logger.error(f"Error getting user profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/user/profile")
+async def update_user_profile(update_data: dict, user_id: str = Depends(verify_google_token)):
+    """Update user profile name and picture."""
+    try:
+        update_fields = {}
+        if "name" in update_data:
+            update_fields["name"] = update_data["name"]
+        if "picture" in update_data:
+            # Storing base64 string directly
+            update_fields["picture"] = update_data["picture"]
+            
+        if update_fields:
+            await db.users.update_one(
+                {"id": user_id},
+                {"$set": update_fields},
+                upsert=True
+            )
+        return {"status": "success", "message": "Profile updated"}
+    except Exception as e:
+        logger.error(f"Error updating user profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/user/history")

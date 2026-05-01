@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Image, TextInput, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import * as ImagePicker from 'expo-image-picker';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://neurocash.vercel.app";
 
@@ -40,6 +41,8 @@ interface Report {
 
 interface UserProfile {
   user_id: string;
+  name: string;
+  picture: string | null;
   karma_score: number;
   report_count: number;
   karma_level: string;
@@ -49,55 +52,123 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [history, setHistory] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Edit State
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const fetchProfileData = async () => {
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      if (token) {
+        const response = await axios.get(`${BACKEND_URL}/api/user/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = response.data;
+        setProfile({
+          user_id: data.user_id || 'user',
+          name: data.name || 'Guest',
+          picture: data.picture || null,
+          karma_score: data.karma_score || 1.0,
+          report_count: data.report_count || 0,
+          karma_level: data.karma_level || 'Bronze'
+        });
+        setEditName(data.name || 'Guest');
+        
+        try {
+           const historyRes = await axios.get(`${BACKEND_URL}/api/user/history?user_id=${data.user_id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+           });
+           setHistory(historyRes.data.reports || []);
+        } catch (e) {
+           setHistory([]);
+        }
+      } else {
+        setProfile({
+          user_id: 'guest_user_123',
+          name: 'Guest',
+          picture: null,
+          karma_score: 1.0,
+          report_count: 0,
+          karma_level: 'Bronze'
+        });
+        setEditName('Guest');
+        setHistory([]);
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProfileData = async () => {
-      try {
-        const token = await AsyncStorage.getItem('googleToken');
-        if (token) {
-          const response = await axios.get(`${BACKEND_URL}/api/user/profile`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          setProfile({
-            user_id: response.data.user_id || 'user',
-            karma_score: response.data.karma_score || 1.0,
-            report_count: response.data.report_count || 0,
-            karma_level: response.data.karma_level || 'Bronze'
-          });
-          
-          try {
-             const userId = response.data.user_id || 'user';
-             const historyRes = await axios.get(`${BACKEND_URL}/api/user/history?user_id=${userId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-             });
-             setHistory(historyRes.data.reports || []);
-          } catch (e) {
-             console.log("Could not load history", e);
-             setHistory([]);
-          }
-        } else {
-          // MVP fallback
-          setProfile({
-            user_id: 'guest_user_123',
-            karma_score: 1.0,
-            report_count: 0,
-            karma_level: 'Bronze'
-          });
-          setHistory([]);
-        }
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProfileData();
   }, []);
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem('googleToken');
     router.replace('/');
+  };
+
+  const pickImage = async () => {
+    // Request permissions
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      if (Platform.OS !== 'web') {
+        Alert.alert("Permission required", "You need to allow access to your photos to change your profile picture.");
+      } else {
+        window.alert("Permission required: You need to allow access to your photos.");
+      }
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.2, // Keep it small for Vercel/MongoDB limits
+      base64: true, // Crucial for sending to Vercel easily
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const asset = result.assets[0];
+      const base64Image = `data:image/jpeg;base64,${asset.base64}`;
+      handleSaveProfile(editName, base64Image);
+    }
+  };
+
+  const handleSaveProfile = async (newName: string, newPicture?: string) => {
+    if (!profile) return;
+    setSaving(true);
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      const payload: any = { name: newName };
+      if (newPicture) {
+        payload.picture = newPicture;
+      }
+
+      await axios.put(`${BACKEND_URL}/api/user/profile`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Update local state
+      setProfile({
+        ...profile,
+        name: newName,
+        picture: newPicture || profile.picture
+      });
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Error saving profile", error);
+      if (Platform.OS !== 'web') {
+        Alert.alert("Error", "Could not save profile details.");
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -123,19 +194,15 @@ export default function ProfileScreen() {
   const karma = profile.karma_score;
   let progress = 0;
   let nextRank = '';
-  let maxScoreForRank = 1;
-
+  
   if (karma < 2.0) {
     progress = (karma - 1.0) / (2.0 - 1.0);
-    maxScoreForRank = 2.0;
     nextRank = 'Silver';
   } else if (karma < 5.0) {
     progress = (karma - 2.0) / (5.0 - 2.0);
-    maxScoreForRank = 5.0;
     nextRank = 'Gold';
   } else {
     progress = 1;
-    maxScoreForRank = 5.0;
     nextRank = 'Max Rank';
   }
 
@@ -153,6 +220,51 @@ export default function ProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
+        {/* Profile Card Section */}
+        <View style={styles.profileCard}>
+          <TouchableOpacity style={styles.avatarContainer} onPress={pickImage} disabled={saving}>
+            {profile.picture ? (
+              <Image source={{ uri: profile.picture }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Ionicons name="person" size={48} color="#9CA3AF" />
+              </View>
+            )}
+            <View style={styles.editAvatarBadge}>
+              <Ionicons name="camera" size={14} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+          
+          {isEditing ? (
+            <View style={styles.editNameContainer}>
+              <TextInput
+                style={styles.nameInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Enter your name"
+                placeholderTextColor="#9CA3AF"
+                autoFocus
+              />
+              <View style={styles.editActions}>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => { setIsEditing(false); setEditName(profile.name); }}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveButton} onPress={() => handleSaveProfile(editName)} disabled={saving}>
+                  {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveButtonText}>Save</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.nameContainer}>
+              <Text style={styles.userName}>{profile.name}</Text>
+              <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editNameIcon}>
+                <Ionicons name="pencil" size={18} color="#4F46E5" />
+              </TouchableOpacity>
+            </View>
+          )}
+          <Text style={styles.userEmail}>{profile.user_id.length > 20 ? 'Google Authenticated User' : profile.user_id}</Text>
+        </View>
+
         {/* Scoreboard Section */}
         <View style={styles.scoreboardCard}>
           <View style={styles.scoreHeader}>
@@ -238,6 +350,24 @@ const styles = StyleSheet.create({
   logoutButtonHeader: { padding: 4 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937' },
   scrollContent: { padding: 16 },
+  
+  profileCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3, marginBottom: 24 },
+  avatarContainer: { position: 'relative', marginBottom: 16 },
+  avatarImage: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#E5E7EB' },
+  avatarPlaceholder: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' },
+  editAvatarBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#4F46E5', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#FFF' },
+  nameContainer: { flexDirection: 'row', alignItems: 'center' },
+  userName: { fontSize: 22, fontWeight: '800', color: '#1F2937' },
+  editNameIcon: { marginLeft: 8, padding: 4 },
+  userEmail: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+  editNameContainer: { width: '100%', alignItems: 'center' },
+  nameInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, width: '80%', paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, color: '#1F2937', textAlign: 'center', marginBottom: 12 },
+  editActions: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  cancelButton: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  cancelButtonText: { color: '#4B5563', fontWeight: '600' },
+  saveButton: { paddingVertical: 8, paddingHorizontal: 24, borderRadius: 8, backgroundColor: '#4F46E5' },
+  saveButtonText: { color: '#FFF', fontWeight: '600' },
+
   scoreboardCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3, marginBottom: 24 },
   scoreHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
   badgeIcon: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
