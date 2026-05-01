@@ -20,6 +20,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { makeRedirectUri } from 'expo-auth-session';
 
 WebBrowser.maybeCompleteAuthSession();
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "https://neurocash.vercel.app";
@@ -101,11 +102,21 @@ export default function NeuroCashApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
+  const redirectUri = makeRedirectUri({
+    scheme: 'neurocash',
+  });
+  console.log("====================================");
+  console.log("GOOGLE OAUTH REDIRECT URI:");
+  console.log(redirectUri);
+  console.log("Ensure this URI is added to Google Cloud Console > APIs & Services > Credentials > Authorized redirect URIs.");
+  console.log("====================================");
+
   const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
-    iosClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
-    webClientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
-    clientId: '1062302145281-ldd0bkudejkqo6cdtfa891l6889u0aup.apps.googleusercontent.com',
+    androidClientId: '1062302145281-5dgmfeac9a8tiprjofsocv99u6ts9jfc.apps.googleusercontent.com',
+    iosClientId: '1062302145281-5dgmfeac9a8tiprjofsocv99u6ts9jfc.apps.googleusercontent.com',
+    webClientId: '1062302145281-5dgmfeac9a8tiprjofsocv99u6ts9jfc.apps.googleusercontent.com',
+    clientId: '1062302145281-5dgmfeac9a8tiprjofsocv99u6ts9jfc.apps.googleusercontent.com',
+    redirectUri,
   });
 
   useEffect(() => {
