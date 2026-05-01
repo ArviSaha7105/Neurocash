@@ -11,6 +11,7 @@ import {
   Dimensions,
   ScrollView,
   Linking,
+  Image,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -158,6 +159,7 @@ export default function NeuroCashApp() {
   const [promptedATMs, setPromptedATMs] = useState<Set<string>>(new Set());
   const [userKarma, setUserKarma] = useState<number>(1.0);
   const [userLevel, setUserLevel] = useState<string>('Bronze');
+  const [userPicture, setUserPicture] = useState<string | null>(null);
   const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const lastFetchLocationRef = useRef<UserLocation | null>(null);
@@ -171,6 +173,7 @@ export default function NeuroCashApp() {
         });
         setUserKarma(response.data.karma_score);
         setUserLevel(response.data.karma_level);
+        setUserPicture(response.data.picture || null);
       }
     } catch (e) {
       console.log('Error fetching user profile:', e);
@@ -847,7 +850,11 @@ export default function NeuroCashApp() {
             <Text style={styles.karmaText}>{userLevel} ({userKarma.toFixed(1)})</Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileButton}>
-            <Ionicons name="person-circle" size={28} color="#4F46E5" />
+            {userPicture ? (
+              <Image source={{ uri: userPicture }} style={{width: 28, height: 28, borderRadius: 14}} />
+            ) : (
+              <Ionicons name="person-circle" size={28} color="#4F46E5" />
+            )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.refreshButton} onPress={() => fetchNearbyATMs(true)}>
             <Ionicons name="refresh" size={22} color="#4F46E5" />
@@ -859,7 +866,7 @@ export default function NeuroCashApp() {
       <View style={styles.locationBar}>
         <Ionicons name="location" size={16} color="#4F46E5" />
         <Text style={styles.locationText}>
-          {locationName}
+          Current Location: {locationName}
         </Text>
         <View style={styles.locationDivider} />
         <Text style={styles.locationText}>1km radius</Text>
