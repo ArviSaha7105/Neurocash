@@ -12,6 +12,7 @@ import {
   ScrollView,
   Linking,
   Image,
+  TextInput,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -160,9 +161,36 @@ export default function NeuroCashApp() {
   const [userKarma, setUserKarma] = useState<number>(1.0);
   const [userLevel, setUserLevel] = useState<string>('Bronze');
   const [userPicture, setUserPicture] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const pollingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
   const lastFetchLocationRef = useRef<UserLocation | null>(null);
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+      if (res.data && res.data.length > 0) {
+        const result = res.data[0];
+        setUserLocation({
+          latitude: parseFloat(result.lat),
+          longitude: parseFloat(result.lon)
+        });
+      } else {
+        if (!isWeb) {
+          Alert.alert("Not Found", "Could not find that location.");
+        } else {
+          window.alert("Could not find that location.");
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const fetchUserProfile = async () => {
     try {
@@ -862,6 +890,28 @@ export default function NeuroCashApp() {
         </View>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputWrapper}>
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search for ATMs in other areas..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
+          />
+        </View>
+        <TouchableOpacity onPress={handleSearch} style={styles.searchActionBtn} disabled={isSearching}>
+          {isSearching ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.searchBtnText}>Search</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={fetchLocationWithPermission} style={styles.myLocationBtn}>
+          <Ionicons name="locate" size={20} color="#4F46E5" />
+        </TouchableOpacity>
+      </View>
+
       {/* Location Bar */}
       <View style={styles.locationBar}>
         <Ionicons name="location" size={16} color="#4F46E5" />
@@ -929,6 +979,13 @@ const styles = StyleSheet.create({
   karmaBronze: { backgroundColor: '#B45309' },
   karmaText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   refreshButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center' },
+  searchContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', alignItems: 'center' },
+  searchInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 44, marginRight: 8 },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: '#1F2937', height: '100%' },
+  searchActionBtn: { backgroundColor: '#4F46E5', height: 44, paddingHorizontal: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  searchBtnText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
+  myLocationBtn: { width: 44, height: 44, backgroundColor: '#EEF2FF', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   locationBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, backgroundColor: '#EEF2FF' },
   locationText: { fontSize: 12, color: '#4F46E5', marginLeft: 4, fontWeight: '500' },
   locationDivider: { width: 1, height: 14, backgroundColor: '#A5B4FC', marginHorizontal: 12 },
