@@ -15,6 +15,7 @@ import {
   TextInput,
 } from 'react-native';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -551,6 +552,16 @@ export default function NeuroCashApp() {
   };
 
   const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      if (Platform.OS !== 'web') {
+        Alert.alert("Permission Denied", "We need camera access to verify ATMs.");
+      } else {
+        window.alert("Permission Denied: We need camera access to verify ATMs.");
+      }
+      return;
+    }
+
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [4, 3],
