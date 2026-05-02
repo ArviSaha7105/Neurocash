@@ -96,8 +96,24 @@ export default function ProfileScreen() {
         setEditName('Guest');
         setHistory([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching profile:', error);
+      // Fallback to Guest mode if there's an error (e.g. invalid/expired token)
+      setProfile({
+        user_id: 'guest_user_123',
+        name: 'Guest',
+        picture: null,
+        karma_score: 1.0,
+        report_count: 0,
+        karma_level: 'Bronze'
+      });
+      setEditName('Guest');
+      setHistory([]);
+      
+      // If it's a 401 Unauthorized, clear the invalid token
+      if (error.response?.status === 401) {
+        AsyncStorage.removeItem('googleToken');
+      }
     } finally {
       setLoading(false);
     }
