@@ -168,6 +168,11 @@ export default function NeuroCashApp() {
   const [submitting, setSubmitting] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [newBankName, setNewBankName] = useState('');
+  const [newBranchName, setNewBranchName] = useState('');
+  const [atmPhoto, setAtmPhoto] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
   const [userId] = useState(`user_${Date.now()}`);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [nearbyATMPrompt, setNearbyATMPrompt] = useState<ATM | null>(null);
@@ -545,6 +550,65 @@ export default function NeuroCashApp() {
     }
   };
 
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      setAtmPhoto(result.assets[0].uri);
+    }
+  };
+
+  const handleAddATM = async () => {
+    if (!newBankName || !newBranchName || !userLocation) {
+      if (Platform.OS !== 'web') Alert.alert("Error", "Please fill all fields.");
+      return;
+    }
+
+    if (!atmPhoto) {
+      if (Platform.OS !== 'web') Alert.alert("Photo Required", "You must take a photo of the ATM from outside to verify its location.");
+      return;
+    }
+
+    setIsAdding(true);
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      await axios.post(`${BACKEND_URL}/api/atms/add`, {
+        bank_name: newBankName,
+        branch_name: newBranchName,
+        latitude: userLocation.latitude,
+        longitude: userLocation.longitude,
+        address: locationName,
+        image_base64: atmPhoto // In a real app we'd upload this to S3/Cloudinary first
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (Platform.OS !== 'web') {
+        Alert.alert("Success!", "New ATM added to the map. You earned 50 bonus points!");
+      } else {
+        window.alert("Success! New ATM added. You earned 50 bonus points!");
+      }
+      
+      setAddModalVisible(false);
+      setNewBankName('');
+      setNewBranchName('');
+      setAtmPhoto(null);
+      fetchNearbyATMs(true);
+      fetchUserProfile();
+    } catch (error: any) {
+      console.error('Error adding ATM:', error);
+      const detail = error.response?.data?.detail || "Could not add ATM.";
+      if (Platform.OS !== 'web') Alert.alert("Error", detail);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
   const fetchNotifications = async () => {
     try {
       const token = await AsyncStorage.getItem('googleToken');
@@ -718,6 +782,85 @@ export default function NeuroCashApp() {
             </View>
 
             {submitting && <ActivityIndicator size="small" color="#4F46E5" style={{ marginTop: 16 }} />}
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderAddATMModal = () => {
+    return (
+      <Modal visible={addModalVisible} animationType="slide" transparent onRequestClose={() => setAddModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.detailContent}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.detailHeader}>
+              <View style={styles.detailTitleWrapper}>
+                <Text style={styles.detailBankName}>Add New ATM</Text>
+                <Text style={styles.detailBranchName}>Help others find cash by adding missing ATMs</Text>
+              </View>
+              <TouchableOpacity style={styles.closeButton} onPress={() => setAddModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.addForm}>
+              <Text style={styles.inputLabel}>Bank Name</Text>
+              <TextInput 
+                style={styles.formInput} 
+                placeholder="e.g. HDFC Bank, SBI, etc." 
+                placeholderTextColor="#94A3B8"
+                value={newBankName}
+                onChangeText={setNewBankName}
+              />
+
+              <Text style={styles.inputLabel}>Branch / Location Name</Text>
+              <TextInput 
+                style={styles.formInput} 
+                placeholder="e.g. Airport Terminal 2, MG Road" 
+                placeholderTextColor="#94A3B8"
+                value={newBranchName}
+                onChangeText={setNewBranchName}
+              />
+
+              <View style={styles.locationSummary}>
+                <Ionicons name="location" size={18} color="#6366F1" />
+                <Text style={styles.locationSummaryText}>Capturing your current GPS location...</Text>
+              </View>
+
+              <TouchableOpacity style={styles.photoButton} onPress={handlePickImage}>
+                {atmPhoto ? (
+                  <View style={styles.photoPreviewContainer}>
+                    <Image source={{ uri: atmPhoto }} style={styles.photoPreview} />
+                    <View style={styles.photoSuccessOverlay}>
+                      <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                      <Text style={styles.photoSuccessText}>Photo Captured</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    <Ionicons name="camera" size={32} color="#6366F1" />
+                    <Text style={styles.photoButtonText}>Take ATM Photo from Outside</Text>
+                    <Text style={styles.photoSubtext}>Required for verification</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.directionsButton, (!newBankName || !newBranchName || !atmPhoto) && { opacity: 0.6 }]} 
+                onPress={handleAddATM}
+                disabled={isAdding}
+              >
+                {isAdding ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="add-circle" size={20} color="#FFF" />
+                    <Text style={styles.directionsButtonText}>Verify & Add ATM (+50 Pts)</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1042,6 +1185,9 @@ export default function NeuroCashApp() {
         <TouchableOpacity onPress={handleSearch} style={styles.searchActionBtn} disabled={isSearching}>
           {isSearching ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="arrow-forward" size={20} color="#FFF" />}
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => setAddModalVisible(true)} style={styles.addAtmBtn}>
+          <Ionicons name="add" size={24} color="#FFF" />
+        </TouchableOpacity>
         <TouchableOpacity onPress={fetchLocationWithPermission} style={styles.myLocationBtn}>
           <Ionicons name="locate" size={20} color="#6366F1" />
         </TouchableOpacity>
@@ -1082,6 +1228,7 @@ export default function NeuroCashApp() {
       {/* Modals */}
       {renderNearbyPrompt()}
       {renderATMModal()}
+      {renderAddATMModal()}
     </SafeAreaView>
   );
 }
@@ -1120,6 +1267,7 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 15, color: '#F1F5F9', height: '100%' },
   searchActionBtn: { backgroundColor: '#6366F1', height: 48, width: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 8, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  addAtmBtn: { backgroundColor: '#10B981', height: 48, width: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 8, shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   searchBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
   myLocationBtn: { width: 48, height: 48, backgroundColor: '#334155', borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#475569' },
   locationBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, backgroundColor: '#312E81' },
@@ -1213,4 +1361,16 @@ const styles = StyleSheet.create({
   reportButton: { width: '47%', height: 100, borderRadius: 24, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 6 },
   reportButtonDisabled: { opacity: 0.4 },
   reportButtonText: { color: '#FFF', fontWeight: '900', fontSize: 13, marginTop: 10, textTransform: 'uppercase' },
+  addForm: { marginTop: 8 },
+  inputLabel: { fontSize: 13, fontWeight: '700', color: '#64748B', marginBottom: 8, marginLeft: 4, textTransform: 'uppercase' },
+  formInput: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: '#0F172A', marginBottom: 20, fontWeight: '600' },
+  locationSummary: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', padding: 12, borderRadius: 12, marginBottom: 20 },
+  locationSummaryText: { marginLeft: 10, color: '#4F46E5', fontSize: 13, fontWeight: '700' },
+  photoButton: { height: 160, backgroundColor: '#F8FAFC', borderRadius: 24, borderWidth: 2, borderColor: '#E2E8F0', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginBottom: 24, overflow: 'hidden' },
+  photoButtonText: { marginTop: 10, fontSize: 15, fontWeight: '800', color: '#6366F1' },
+  photoSubtext: { marginTop: 4, fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  photoPreviewContainer: { width: '100%', height: '100%', position: 'relative' },
+  photoPreview: { width: '100%', height: '100%' },
+  photoSuccessOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(255, 255, 255, 0.95)', paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  photoSuccessText: { color: '#10B981', fontWeight: '800', fontSize: 13 },
 });

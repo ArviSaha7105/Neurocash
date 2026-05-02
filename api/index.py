@@ -102,6 +102,14 @@ class ATMSubscription(BaseModel):
     user_id: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+class ATMAddRequest(BaseModel):
+    bank_name: str
+    branch_name: str
+    latitude: float
+    longitude: float
+    address: str
+    image_base64: Optional[str] = None
+
 # ==================== UTILITY FUNCTIONS ====================
 
 async def process_karma_updates(atm_id: str, new_status: Optional[str] = None):
@@ -685,6 +693,48 @@ async def mark_notification_read(notif_id: str, user_id: str = Depends(verify_go
         {"$set": {"read": True}}
     )
     return {"status": "success"}
+
+@api_router.post("/atms/add")
+async def add_new_atm(request: ATMAddRequest, user_id: str = Depends(verify_google_token)):
+    """Add a new missing ATM to the database."""
+    # Create new ATM object
+    new_atm = {
+        "id": f"manual_{str(uuid.uuid4())[:8]}",
+        "bank_name": request.bank_name,
+        "branch_name": request.branch_name,
+        "latitude": request.latitude,
+        "longitude": request.longitude,
+        "address": request.address,
+        "current_status": "grey",  # Start as unknown
+        "bank_online": True,
+        "last_report_time": None,
+        "is_manual": True,
+        "added_by": user_id,
+        "verified": True if request.image_base64 else False,
+        "created_at": datetime.utcnow()
+    }
+    
+    # Check for duplicates (very basic check by coordinates)
+    existing = await db.atms.find_one({
+        "latitude": {"$gt": request.latitude - 0.0001, "$lt": request.latitude + 0.0001},
+        "longitude": {"$gt": request.longitude - 0.0001, "$lt": request.longitude + 0.0001}
+    })
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="An ATM already exists at this location")
+    
+    await db.atms.insert_one(new_atm)
+    
+    # Award 50 points for adding a new ATM
+    await db.users.update_one(
+        {"google_id": user_id},
+        {"$inc": {"points": 50}}
+    )
+    
+    return {
+        "message": "ATM added successfully! You earned 50 points.",
+        "atm_id": new_atm["id"]
+    }
 
 # TC_04: Mock Bank Gateway
 @api_router.post("/bank/gateway/status")
