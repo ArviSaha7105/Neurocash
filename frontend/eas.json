@@ -10,6 +10,10 @@
     "preview": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://neurocash.vercel.app",
+        "EAS_SKIP_AUTO_FINGERPRINT": "1"
       }
     },
     "production": {}
