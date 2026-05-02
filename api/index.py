@@ -662,6 +662,23 @@ async def notify_subscribers(atm_id: str):
         # Delete the subscription once notified
         await db.atm_subscriptions.delete_one({"id": sub["id"]})
 
+async def mock_ai_vision_check(image_base64: str, bank_name: str):
+    """
+    Simulates a call to Gemini/Vision API.
+    In a real app, you would use google-generativeai here.
+    """
+    # Simulate API latency
+    await asyncio.sleep(1)
+    
+    # Simple mock logic: if image is provided, 95% chance it's a 'pass'
+    # In reality, Gemini would return JSON: {"is_atm": True, "bank": "HDFC"}
+    import random
+    if not image_base64:
+        return False, "No image provided"
+        
+    is_valid = random.random() < 0.98
+    return is_valid, "Looks like an ATM"
+
 @api_router.post("/atms/{atm_id}/subscribe")
 async def subscribe_to_atm(atm_id: str, user_id: str = Depends(verify_google_token)):
     """Subscribe to receive a notification when an ATM gets cash."""
@@ -696,7 +713,20 @@ async def mark_notification_read(notif_id: str, user_id: str = Depends(verify_go
 
 @api_router.post("/atms/add")
 async def add_new_atm(request: ATMAddRequest, user_id: str = Depends(verify_google_token)):
-    """Add a new missing ATM to the database."""
+    """Add a new missing ATM with Hybrid Trust verification."""
+    # 1. AI Vision Check (Option 1)
+    ai_passed, ai_msg = await mock_ai_vision_check(request.image_base64, request.bank_name)
+    if not ai_passed:
+        raise HTTPException(status_code=400, detail=f"AI Verification Failed: {ai_msg}")
+
+    # 2. Karma Check (Option 3)
+    user = await db.users.find_one({"google_id": user_id})
+    user_points = user.get("points", 0) if user else 0
+    
+    # Determine initial verification status
+    # Gold users (>1000 pts) are trusted instantly
+    initial_status = "verified" if user_points >= 1000 else "pending"
+    
     # Create new ATM object
     new_atm = {
         "id": f"manual_{str(uuid.uuid4())[:8]}",
@@ -705,16 +735,16 @@ async def add_new_atm(request: ATMAddRequest, user_id: str = Depends(verify_goog
         "latitude": request.latitude,
         "longitude": request.longitude,
         "address": request.address,
-        "current_status": "grey",  # Start as unknown
+        "current_status": "grey",
         "bank_online": True,
         "last_report_time": None,
         "is_manual": True,
         "added_by": user_id,
-        "verified": True if request.image_base64 else False,
+        "verification_status": initial_status,
+        "votes": 1, # Uploader's vote
         "created_at": datetime.utcnow()
     }
     
-    # Check for duplicates (very basic check by coordinates)
     existing = await db.atms.find_one({
         "latitude": {"$gt": request.latitude - 0.0001, "$lt": request.latitude + 0.0001},
         "longitude": {"$gt": request.longitude - 0.0001, "$lt": request.longitude + 0.0001}
@@ -725,16 +755,53 @@ async def add_new_atm(request: ATMAddRequest, user_id: str = Depends(verify_goog
     
     await db.atms.insert_one(new_atm)
     
-    # Award 50 points for adding a new ATM
+    # Award 50 points
     await db.users.update_one(
         {"google_id": user_id},
         {"$inc": {"points": 50}}
     )
     
     return {
-        "message": "ATM added successfully! You earned 50 points.",
+        "message": f"ATM added successfully! Status: {initial_status}",
+        "verification_status": initial_status,
         "atm_id": new_atm["id"]
     }
+
+@api_router.post("/atms/{atm_id}/confirm")
+async def confirm_atm_location(atm_id: str, exists: bool, user_id: str = Depends(verify_google_token)):
+    """Community voting for unverified ATMs (Option 4)."""
+    atm = await db.atms.find_one({"id": atm_id})
+    if not atm:
+        raise HTTPException(status_code=404, detail="ATM not found")
+        
+    if atm.get("verification_status") == "verified":
+        return {"message": "ATM already verified"}
+
+    # Update votes
+    vote_inc = 1 if exists else -1
+    await db.atms.update_one(
+        {"id": atm_id},
+        {"$inc": {"votes": vote_inc}}
+    )
+    
+    # Re-fetch for updated count
+    updated_atm = await db.atms.find_one({"id": atm_id})
+    votes = updated_atm.get("votes", 0)
+    
+    # Logic: 3 net votes to verify
+    if votes >= 3:
+        await db.atms.update_one(
+            {"id": atm_id},
+            {"$set": {"verification_status": "verified"}}
+        )
+        return {"message": "ATM has been fully verified by the community!"}
+    
+    # Logic: -2 net votes to reject/delete
+    if votes <= -2:
+        await db.atms.delete_one({"id": atm_id})
+        return {"message": "ATM removed due to community reports"}
+
+    return {"message": "Thank you for your verification vote!", "current_votes": votes}
 
 # TC_04: Mock Bank Gateway
 @api_router.post("/bank/gateway/status")

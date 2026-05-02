@@ -577,21 +577,26 @@ export default function NeuroCashApp() {
     setIsAdding(true);
     try {
       const token = await AsyncStorage.getItem('googleToken');
-      await axios.post(`${BACKEND_URL}/api/atms/add`, {
+      const response = await axios.post(`${BACKEND_URL}/api/atms/add`, {
         bank_name: newBankName,
         branch_name: newBranchName,
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
         address: locationName,
-        image_base64: atmPhoto // In a real app we'd upload this to S3/Cloudinary first
+        image_base64: atmPhoto
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
+      const { verification_status } = response.data;
+      const successMsg = verification_status === 'verified' 
+        ? "ATM added and instantly verified by your high Karma!" 
+        : "ATM added! It will appear as 'Pending' until verified by the community.";
+
       if (Platform.OS !== 'web') {
-        Alert.alert("Success!", "New ATM added to the map. You earned 50 bonus points!");
+        Alert.alert("Success!", `${successMsg} (+50 Points)`);
       } else {
-        window.alert("Success! New ATM added. You earned 50 bonus points!");
+        window.alert(`Success! ${successMsg} (+50 Points)`);
       }
       
       setAddModalVisible(false);
@@ -606,6 +611,27 @@ export default function NeuroCashApp() {
       if (Platform.OS !== 'web') Alert.alert("Error", detail);
     } finally {
       setIsAdding(false);
+    }
+  };
+
+  const handleConfirmATM = async (exists: boolean) => {
+    if (!selectedATM) return;
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      const response = await axios.post(`${BACKEND_URL}/api/atms/${selectedATM.id}/confirm`, { exists }, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { exists } // API uses query params or body depending on setup, I'll match my endpoint
+      });
+      
+      if (Platform.OS !== 'web') {
+        Alert.alert("Vote Recorded", response.data.message);
+      } else {
+        window.alert(response.data.message);
+      }
+      setDetailModalVisible(false);
+      fetchNearbyATMs(true);
+    } catch (error) {
+      console.error('Error confirming ATM:', error);
     }
   };
 
@@ -735,6 +761,23 @@ export default function NeuroCashApp() {
                   </Text>
                 </View>
               </View>
+
+              {selectedATM.verification_status === 'pending' && (
+                <View style={styles.verificationCard}>
+                  <Text style={styles.verificationTitle}>👥 Community Vetting</Text>
+                  <Text style={styles.verificationSubtitle}>This location is unverified. Is the ATM really here?</Text>
+                  <View style={styles.voteButtons}>
+                    <TouchableOpacity style={[styles.voteBtn, styles.voteYes]} onPress={() => handleConfirmATM(true)}>
+                      <Ionicons name="thumbs-up" size={18} color="#FFF" />
+                      <Text style={styles.voteText}>Yes, it exists</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.voteBtn, styles.voteNo]} onPress={() => handleConfirmATM(false)}>
+                      <Ionicons name="thumbs-down" size={18} color="#FFF" />
+                      <Text style={styles.voteText}>Fake Location</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
               <TouchableOpacity style={styles.directionsButton} onPress={() => openInGoogleMaps(selectedATM)}>
                 <Ionicons name="navigate" size={20} color="#FFF" />
@@ -894,6 +937,10 @@ export default function NeuroCashApp() {
                               filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.8));
                               animation: pulse-glow 2s infinite;
                           }
+                          .pending-marker {
+                              opacity: 0.5;
+                              filter: grayscale(80%);
+                          }
                           @keyframes pulse-glow {
                               0% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.5)); }
                               50% { transform: scale(1.1); filter: drop-shadow(0 0 15px rgba(16, 185, 129, 0.9)); }
@@ -933,6 +980,8 @@ export default function NeuroCashApp() {
                                   }
                               }
 
+                              var isPending = atm.verification_status === 'pending';
+
                               var icon = new L.Icon({
                                   iconUrl: colors[atm.current_status] || colors['grey'],
                                   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -940,10 +989,10 @@ export default function NeuroCashApp() {
                                   iconAnchor: [12, 41],
                                   popupAnchor: [1, -34],
                                   shadowSize: [41, 41],
-                                  className: isFresh ? 'pulsing-marker' : ''
+                                  className: (isFresh ? 'pulsing-marker ' : '') + (isPending ? 'pending-marker' : '')
                               });
                               L.marker([atm.latitude, atm.longitude], {icon: icon}).addTo(map)
-                                  .bindPopup('<b>' + atm.bank_name + '</b><br>' + atm.branch_name + '<br><b>Status:</b> ' + atm.current_status + (isFresh ? '<br><span style="color: #10B981; font-weight: bold;">⚡ Just Verified!</span>' : ''));
+                                  .bindPopup('<b>' + atm.bank_name + '</b><br>' + atm.branch_name + (isPending ? '<br><span style="color: #F59E0B;">⚠️ Unverified</span>' : '') + '<br><b>Status:</b> ' + atm.current_status + (isFresh ? '<br><span style="color: #10B981; font-weight: bold;">⚡ Just Verified!</span>' : ''));
                           });
                       </script>
                   </body>
@@ -1295,6 +1344,7 @@ const styles = StyleSheet.create({
   atmInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   atmAddress: { marginLeft: 10, fontSize: 14, color: '#94A3B8', flex: 1 },
   atmDistance: { marginLeft: 10, fontSize: 14, color: '#6366F1', fontWeight: '700' },
+  atmPendingText: { color: '#F59E0B', fontSize: 11, fontWeight: '800', marginTop: 4 },
   atmCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   statusBadge: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderHeight: 1 },
   statusBadgeText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -1373,4 +1423,12 @@ const styles = StyleSheet.create({
   photoPreview: { width: '100%', height: '100%' },
   photoSuccessOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(255, 255, 255, 0.95)', paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   photoSuccessText: { color: '#10B981', fontWeight: '800', fontSize: 13 },
+  verificationCard: { backgroundColor: '#FFF7ED', padding: 16, borderRadius: 20, borderWidth: 1, borderColor: '#FED7AA', marginBottom: 20 },
+  verificationTitle: { fontSize: 15, fontWeight: '900', color: '#9A3412', marginBottom: 4 },
+  verificationSubtitle: { fontSize: 13, color: '#C2410C', marginBottom: 16 },
+  voteButtons: { flexDirection: 'row', gap: 10 },
+  voteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, gap: 8 },
+  voteYes: { backgroundColor: '#10B981' },
+  voteNo: { backgroundColor: '#F43F5E' },
+  voteText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
 });
