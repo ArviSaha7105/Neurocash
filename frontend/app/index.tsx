@@ -224,7 +224,7 @@ export default function NeuroCashApp() {
         setUserLevel(response.data.karma_level);
         setUserPicture(decodedToken.picture);
       
-        const adminList = ["arvisaha7105@gmail.com", "admin@neurocash.com"];
+        const adminList = ["arityasaha71@gmail.com", "admin@neurocash.com"];
         if (adminList.includes(decodedToken.email)) {
           setIsAdmin(true);
         }

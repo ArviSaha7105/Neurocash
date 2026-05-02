@@ -817,7 +817,7 @@ async def get_admin_stats(user_id: str = Depends(verify_google_token)):
     """Fetch high-level analytics for the admin dashboard."""
     # Security check: only allow master admins
     # In a real app, this would check an 'is_admin' field in the User model
-    master_admins = ["arvisaha7105@gmail.com", "admin@neurocash.com"]
+    master_admins = ["arityasaha71@gmail.com", "admin@neurocash.com"]
     user = await db.users.find_one({"google_id": user_id})
     if not user or (user.get("email") not in master_admins and user.get("google_id") not in master_admins):
         raise HTTPException(status_code=403, detail="Unauthorized: Admin access only")
