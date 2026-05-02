@@ -655,6 +655,23 @@ export default function NeuroCashApp() {
                 <Ionicons name="location-outline" size={20} color="#6B7280" />
                 <Text style={styles.infoText}>{selectedATM.address}</Text>
               </View>
+              
+              <View style={[styles.geofenceStatus, { backgroundColor: isWithinGeofence ? '#DCFCE7' : '#FEE2E2' }]}>
+                <Ionicons
+                  name={isWithinGeofence ? 'checkmark-circle' : 'close-circle'}
+                  size={24}
+                  color={isWithinGeofence ? '#22C55E' : '#EF4444'}
+                />
+                <View style={styles.geofenceTextContainer}>
+                  <Text style={[styles.geofenceTitle, { color: isWithinGeofence ? '#166534' : '#991B1B' }]}>
+                    {isWithinGeofence ? 'Within Range' : 'Too Far to Report'}
+                  </Text>
+                  <Text style={[styles.geofenceSubtext, { color: isWithinGeofence ? '#166534' : '#991B1B' }]}>
+                    {isWithinGeofence ? 'You can report status' : 'Move closer (within 50m)'}
+                  </Text>
+                </View>
+              </View>
+
               <TouchableOpacity style={styles.directionsButton} onPress={() => openInGoogleMaps(selectedATM)}>
                 <Ionicons name="navigate" size={20} color="#FFF" />
                 <Text style={styles.directionsButtonText}>Get Directions</Text>
@@ -1150,16 +1167,28 @@ const styles = StyleSheet.create({
   promptButtonSecondary: { backgroundColor: '#F3F4F6' },
   promptButtonTextPrimary: { color: '#FFF', fontWeight: '600', fontSize: 16, marginLeft: 8 },
   promptButtonTextSecondary: { color: '#4B5563', fontWeight: '600', fontSize: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.8)', justifyContent: 'flex-end' },
+  detailContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, width: '100%', maxHeight: '92%', shadowColor: '#000', shadowOffset: { width: 0, height: -20 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 30 },
+  sheetHandle: { width: 40, height: 5, backgroundColor: '#E2E8F0', borderRadius: 3, alignSelf: 'center', marginBottom: 20 },
+  detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  detailTitleWrapper: { flex: 1 },
+  detailBankName: { fontSize: 28, fontWeight: '900', color: '#0F172A', letterSpacing: -0.5 },
+  detailBranchName: { fontSize: 15, color: '#64748B', marginTop: 2, fontWeight: '600' },
+  detailStatusSection: { alignItems: 'center', marginBottom: 24, backgroundColor: '#F8FAFC', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: '#E2E8F0' },
+  detailStatusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 18, gap: 12, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 2 },
+  detailStatusText: { fontSize: 22, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
+  notifyButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', paddingHorizontal: 20, paddingVertical: 14, borderRadius: 16, borderWidth: 1.5, borderColor: '#6366F1' },
+  notifyButtonText: { color: '#4F46E5', fontSize: 14, fontWeight: '800', marginLeft: 8 },
+  closeButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   statusBadgeLarge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14, alignSelf: 'flex-start', marginBottom: 16 },
   statusBadgeLargeText: { color: '#FFF', fontWeight: '600', fontSize: 15, marginLeft: 8 },
   infoSection: { marginBottom: 12 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  infoText: { color: '#94A3B8', fontSize: 15, marginLeft: 12, flex: 1, fontWeight: '500' },
+  infoText: { color: '#334155', fontSize: 16, marginLeft: 12, flex: 1, fontWeight: '600' },
   offlineWarning: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', padding: 14, borderRadius: 14, marginTop: 8 },
   offlineText: { marginLeft: 12, color: '#991B1B', fontWeight: '600', fontSize: 15 },
-  directionsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6366F1', paddingVertical: 16, borderRadius: 16, marginTop: 8, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
-  directionsButtonText: { color: '#FFF', fontWeight: '800', fontSize: 16, marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  directionsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6366F1', paddingVertical: 18, borderRadius: 20, marginTop: 12, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+  directionsButtonText: { color: '#FFF', fontWeight: '900', fontSize: 16, marginLeft: 8, textTransform: 'uppercase', letterSpacing: 1 },
   notificationBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#475569', position: 'relative' },
   notifBadge: { position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 5, backgroundColor: '#F43F5E', borderWidth: 2, borderColor: '#334155' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
@@ -1179,9 +1208,9 @@ const styles = StyleSheet.create({
   geofenceTextContainer: { marginLeft: 14, flex: 1 },
   geofenceTitle: { fontSize: 17, fontWeight: '600' },
   geofenceSubtext: { fontSize: 14, marginTop: 4 },
-  reportTitle: { fontSize: 17, fontWeight: '600', color: '#1F2937', marginBottom: 16 },
-  reportButtonsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  reportButton: { width: '48%', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingVertical: 24, borderRadius: 18, marginBottom: 12 },
+  reportTitle: { fontSize: 18, fontWeight: '900', color: '#0F172A', marginBottom: 20, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 1 },
+  reportButtonsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'space-between', marginBottom: 20 },
+  reportButton: { width: '47%', height: 100, borderRadius: 24, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 6 },
   reportButtonDisabled: { opacity: 0.4 },
-  reportButtonText: { color: '#FFF', fontWeight: '600', fontSize: 14, marginTop: 10, textAlign: 'center' },
+  reportButtonText: { color: '#FFF', fontWeight: '900', fontSize: 13, marginTop: 10, textTransform: 'uppercase' },
 });
