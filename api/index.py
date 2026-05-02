@@ -69,6 +69,7 @@ class User(BaseModel):
     id: str
     karma_score: float = 1.0
     report_count: int = 0
+    points: int = 0
 
 class StatusReport(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -159,12 +160,13 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
 async def calculate_atm_status(atm_id: str) -> str:
     """Calculate ATM status based on majority voting from recent reports."""
-    thirty_mins_ago = datetime.utcnow() - timedelta(minutes=30)
+    # Data persists for 24 hours (1440 minutes)
+    twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
     
     # Get recent reports for this ATM
     reports = await db.status_reports.find({
         "atm_id": atm_id,
-        "timestamp": {"$gte": thirty_mins_ago}
+        "timestamp": {"$gte": twenty_four_hours_ago}
     }).to_list(100)
     
     if not reports:
@@ -362,8 +364,8 @@ async def get_nearby_atms(
                 current_status = "red"
             else:
                 last_report = atm.get("last_report_time")
-                # Data decays after 30 mins - if no recent report, use MOCK STATUS for demo
-                if not last_report or (datetime.utcnow() - last_report) > timedelta(minutes=30):
+                # Data decays after 24 hours - if no recent report, use MOCK STATUS for demo
+                if not last_report or (datetime.utcnow() - last_report) > timedelta(hours=24):
                     # TC: Mocking status update for demonstration with real locations
                     current_status = random.choice(["green", "yellow", "red", "grey"])
                 else:
@@ -403,7 +405,7 @@ async def get_all_atms():
                 current_status = "red"
             else:
                 last_report = atm.get("last_report_time")
-                if not last_report or (datetime.utcnow() - last_report) > timedelta(minutes=30):
+                if not last_report or (datetime.utcnow() - last_report) > timedelta(hours=24):
                     current_status = "grey"
                 else:
                     current_status = atm.get("current_status", "grey")
@@ -542,6 +544,13 @@ async def report_atm_status(
             }}
         )
         
+        # Award points to user for reporting (TC: Reward System)
+        await db.users.update_one(
+            {"id": user_id},
+            {"$inc": {"points": 10}},
+            upsert=True
+        )
+        
         # Queue karma processing
         background_tasks.add_task(process_karma_updates, atm_id, new_status)
         
@@ -588,7 +597,7 @@ async def get_atm_status(atm_id: str):
             current_status = "red"
         else:
             last_report = atm.get("last_report_time")
-            if not last_report or (datetime.utcnow() - last_report) > timedelta(minutes=30):
+            if not last_report or (datetime.utcnow() - last_report) > timedelta(hours=24):
                 current_status = "grey"
             else:
                 current_status = atm.get("current_status", "grey")
@@ -686,6 +695,7 @@ async def get_user_profile(user_id: str = Depends(verify_google_token)):
         user = await db.users.find_one({"id": user_id})
         karma_score = user.get("karma_score", 1.0) if user else 1.0
         report_count = user.get("report_count", 0) if user else 0
+        points = user.get("points", 0) if user else 0
         name = user.get("name", "Guest") if user else "Guest"
         picture = user.get("picture", None) if user else None
         
@@ -700,6 +710,7 @@ async def get_user_profile(user_id: str = Depends(verify_google_token)):
             "name": name,
             "picture": picture,
             "karma_score": karma_score,
+            "points": points,
             "report_count": report_count,
             "karma_level": level
         }

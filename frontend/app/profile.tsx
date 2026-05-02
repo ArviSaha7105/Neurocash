@@ -17,10 +17,10 @@ const STATUS_ICONS: Record<string, any> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  cash: '#22C55E',
-  low_cash: '#EAB308',
-  long_queue: '#F97316',
-  no_cash: '#EF4444',
+  cash: '#10B981',
+  low_cash: '#F59E0B',
+  long_queue: '#6366F1',
+  no_cash: '#F43F5E',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -44,6 +44,7 @@ interface UserProfile {
   name: string;
   picture: string | null;
   karma_score: number;
+  points: number;
   report_count: number;
   karma_level: string;
 }
@@ -71,6 +72,7 @@ export default function ProfileScreen() {
           name: data.name || 'Guest',
           picture: data.picture || null,
           karma_score: data.karma_score || 1.0,
+          points: data.points || 0,
           report_count: data.report_count || 0,
           karma_level: data.karma_level || 'Bronze'
         });
@@ -90,6 +92,7 @@ export default function ProfileScreen() {
           name: 'Guest',
           picture: null,
           karma_score: 1.0,
+          points: 0,
           report_count: 0,
           karma_level: 'Bronze'
         });
@@ -104,6 +107,7 @@ export default function ProfileScreen() {
         name: 'Guest',
         picture: null,
         karma_score: 1.0,
+        points: 0,
         report_count: 0,
         karma_level: 'Bronze'
       });
@@ -226,11 +230,11 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButtonHeader}>
-          <Ionicons name="arrow-back" size={24} color="#1F2937" />
+          <Ionicons name="arrow-back" size={24} color="#F8FAFC" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Profile</Text>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButtonHeader}>
-          <Ionicons name="log-out-outline" size={24} color="#EF4444" />
+          <Ionicons name="log-out-outline" size={24} color="#F43F5E" />
         </TouchableOpacity>
       </View>
 
@@ -274,11 +278,11 @@ export default function ProfileScreen() {
             <View style={styles.nameContainer}>
               <Text style={styles.userName}>{profile.name}</Text>
               <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editNameIcon}>
-                <Ionicons name="pencil" size={18} color="#4F46E5" />
+                <Ionicons name="pencil" size={18} color="#6366F1" />
               </TouchableOpacity>
             </View>
           )}
-          <Text style={styles.userEmail}>{profile.user_id.length > 20 ? 'Google Authenticated User' : profile.user_id}</Text>
+          <Text style={styles.userEmail}>{profile.user_id.length > 20 ? 'Neural Verified Account' : profile.user_id}</Text>
         </View>
 
         {/* Scoreboard Section */}
@@ -293,7 +297,11 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.scoreInfo}>
               <Text style={styles.scoreLevel}>{profile.karma_level} Rank</Text>
-              <Text style={styles.scorePoints}>{karma.toFixed(1)} Karma Score</Text>
+              <View style={styles.pointsRow}>
+                <Text style={styles.scorePoints}>{karma.toFixed(1)} Karma</Text>
+                <View style={styles.pointsDot} />
+                <Text style={styles.scorePoints}>{profile.points} Points</Text>
+              </View>
             </View>
           </View>
 
@@ -356,63 +364,65 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: { flex: 1, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 16, color: '#6B7280', marginBottom: 16 },
-  backButton: { backgroundColor: '#4F46E5', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
+  loadingContainer: { flex: 1, backgroundColor: '#0F172A', justifyContent: 'center', alignItems: 'center' },
+  errorText: { fontSize: 16, color: '#94A3B8', marginBottom: 16 },
+  backButton: { backgroundColor: '#6366F1', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
   backButtonText: { color: '#FFF', fontWeight: '600' },
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  container: { flex: 1, backgroundColor: '#0F172A' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 16, backgroundColor: '#1E293B', borderBottomWidth: 1, borderBottomColor: '#334155' },
   backButtonHeader: { padding: 4 },
   logoutButtonHeader: { padding: 4 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#F8FAFC' },
   scrollContent: { padding: 16 },
   
-  profileCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3, marginBottom: 24 },
+  profileCard: { backgroundColor: '#1E293B', borderRadius: 24, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4, marginBottom: 24, borderWidth: 1, borderColor: '#334155' },
   avatarContainer: { position: 'relative', marginBottom: 16 },
-  avatarImage: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#E5E7EB' },
-  avatarPlaceholder: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' },
-  editAvatarBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#4F46E5', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#FFF' },
+  avatarImage: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#334155', borderWidth: 3, borderColor: '#6366F1' },
+  avatarPlaceholder: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center' },
+  editAvatarBadge: { position: 'absolute', bottom: 0, right: 0, backgroundColor: '#6366F1', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#1E293B' },
   nameContainer: { flexDirection: 'row', alignItems: 'center' },
-  userName: { fontSize: 22, fontWeight: '800', color: '#1F2937' },
+  userName: { fontSize: 24, fontWeight: '800', color: '#F8FAFC' },
   editNameIcon: { marginLeft: 8, padding: 4 },
-  userEmail: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+  userEmail: { fontSize: 14, color: '#94A3B8', marginTop: 4, fontWeight: '500' },
   editNameContainer: { width: '100%', alignItems: 'center' },
-  nameInput: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, width: '80%', paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, color: '#1F2937', textAlign: 'center', marginBottom: 12 },
+  nameInput: { backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#334155', borderRadius: 12, width: '85%', paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: '#F8FAFC', textAlign: 'center', marginBottom: 12 },
   editActions: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
-  cancelButton: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#F3F4F6' },
-  cancelButtonText: { color: '#4B5563', fontWeight: '600' },
-  saveButton: { paddingVertical: 8, paddingHorizontal: 24, borderRadius: 8, backgroundColor: '#4F46E5' },
+  cancelButton: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 10, backgroundColor: '#334155' },
+  cancelButtonText: { color: '#94A3B8', fontWeight: '600' },
+  saveButton: { paddingVertical: 8, paddingHorizontal: 24, borderRadius: 10, backgroundColor: '#6366F1' },
   saveButtonText: { color: '#FFF', fontWeight: '600' },
-
-  scoreboardCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 3, marginBottom: 24 },
+  
+  scoreboardCard: { backgroundColor: '#1E293B', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4, marginBottom: 24, borderWidth: 1, borderColor: '#334155' },
   scoreHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-  badgeIcon: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  badgeIcon: { width: 68, height: 68, borderRadius: 34, justifyContent: 'center', alignItems: 'center', marginRight: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
   bgGold: { backgroundColor: '#F59E0B' },
-  bgSilver: { backgroundColor: '#9CA3AF' },
+  bgSilver: { backgroundColor: '#94A3B8' },
   bgBronze: { backgroundColor: '#B45309' },
   scoreInfo: { flex: 1 },
-  scoreLevel: { fontSize: 24, fontWeight: '800', color: '#1F2937' },
-  scorePoints: { fontSize: 15, color: '#6B7280', marginTop: 4, fontWeight: '500' },
+  scoreLevel: { fontSize: 26, fontWeight: '800', color: '#F8FAFC' },
+  pointsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  pointsDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#475569', marginHorizontal: 10 },
+  scorePoints: { fontSize: 15, color: '#94A3B8', fontWeight: '600' },
   progressContainer: { marginBottom: 24 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  progressLabel: { fontSize: 14, color: '#4B5563', fontWeight: '500' },
-  progressValue: { fontSize: 14, color: '#1F2937', fontWeight: '700' },
-  progressBarBg: { height: 10, backgroundColor: '#E5E7EB', borderRadius: 5, overflow: 'hidden' },
-  progressBarFill: { height: '100%', borderRadius: 5 },
-  statsRow: { flexDirection: 'row', backgroundColor: '#F9FAFB', borderRadius: 16, padding: 16 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  progressLabel: { fontSize: 14, color: '#94A3B8', fontWeight: '600' },
+  progressValue: { fontSize: 14, color: '#F8FAFC', fontWeight: '800' },
+  progressBarBg: { height: 12, backgroundColor: '#0F172A', borderRadius: 6, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 6 },
+  statsRow: { flexDirection: 'row', backgroundColor: '#0F172A', borderRadius: 18, padding: 18 },
   statBox: { flex: 1, alignItems: 'center' },
-  statDivider: { width: 1, backgroundColor: '#E5E7EB', marginVertical: 4 },
-  statValue: { fontSize: 20, fontWeight: '700', color: '#4F46E5', marginBottom: 4 },
-  statLabel: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1F2937', marginBottom: 16 },
-  emptyState: { alignItems: 'center', backgroundColor: '#FFF', padding: 32, borderRadius: 16 },
-  emptyText: { marginTop: 12, color: '#6B7280', fontSize: 15 },
-  historyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
-  historyIcon: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+  statDivider: { width: 1, backgroundColor: '#1E293B', marginVertical: 4 },
+  statValue: { fontSize: 22, fontWeight: '800', color: '#6366F1', marginBottom: 4 },
+  statLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '600', textTransform: 'uppercase' },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#F8FAFC', marginBottom: 16, marginLeft: 4 },
+  emptyState: { alignItems: 'center', backgroundColor: '#1E293B', padding: 40, borderRadius: 24, borderWidth: 1, borderColor: '#334155' },
+  emptyText: { marginTop: 12, color: '#94A3B8', fontSize: 15, fontWeight: '500' },
+  historyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', padding: 16, borderRadius: 20, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 2, borderWidth: 1, borderColor: '#334155' },
+  historyIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   historyInfo: { flex: 1 },
-  historyBank: { fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 4 },
-  historyVicinity: { fontSize: 13, color: '#6B7280', marginBottom: 4 },
-  historyDate: { fontSize: 12, color: '#9CA3AF' },
-  historyStatusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginLeft: 12 },
-  historyStatusText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  historyBank: { fontSize: 17, fontWeight: '700', color: '#F8FAFC', marginBottom: 4 },
+  historyVicinity: { fontSize: 13, color: '#94A3B8', marginBottom: 4 },
+  historyDate: { fontSize: 12, color: '#475569', fontWeight: '500' },
+  historyStatusBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginLeft: 12 },
+  historyStatusText: { color: '#FFF', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
 });

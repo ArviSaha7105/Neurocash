@@ -65,10 +65,10 @@ interface UserLocation {
 
 // Status colors
 const STATUS_COLORS: Record<string, string> = {
-  green: '#22C55E',
-  yellow: '#EAB308',
-  red: '#EF4444',
-  grey: '#6B7280',
+  green: '#10B981', // Emerald
+  yellow: '#F59E0B', // Amber
+  red: '#F43F5E', // Rose
+  grey: '#94A3B8', // Slate
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -84,6 +84,19 @@ const STATUS_ICONS: Record<string, string> = {
   red: 'close-circle',
   grey: 'help-circle',
 };
+
+const darkMapStyle = [
+  { "elementType": "geometry", "stylers": [{ "color": "#1e293b" }] },
+  { "elementType": "labels.text.fill", "stylers": [{ "color": "#94a3b8" }] },
+  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#1e293b" }] },
+  { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#334155" }] },
+  { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#94a3b8" }] },
+  { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#0f172a" }] },
+  { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#334155" }] },
+  { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#1e293b" }] },
+  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#64748b" }] },
+  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#0f172a" }] }
+];
 
 // Haversine distance calculation
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -715,8 +728,8 @@ export default function NeuroCashApp() {
                       <div id="map"></div>
                       <script>
                           var map = L.map('map').setView([${userLocation.latitude}, ${userLocation.longitude}], 14);
-                          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                              attribution: '© OpenStreetMap contributors'
+                          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                              attribution: '© OpenStreetMap contributors, © CARTO'
                           }).addTo(map);
                           
                           // User marker
@@ -761,6 +774,7 @@ export default function NeuroCashApp() {
                   longitudeDelta: 0.04,
                 }}
                 showsUserLocation={true}
+                customMapStyle={darkMapStyle}
               >
                 {/* Explicit Marker for User Location */}
                 <Marker
@@ -901,7 +915,10 @@ export default function NeuroCashApp() {
           </View>
           <View>
             <Text style={styles.headerTitle}>NeuroCash</Text>
-            <Text style={styles.headerSubtitle}>{atms.length} ATMs nearby</Text>
+            <View style={styles.liveIndicator}>
+              <View style={styles.liveDot} />
+              <Text style={styles.headerSubtitle}>{atms.length} ATMs Live</Text>
+            </View>
           </View>
         </View>
         <View style={styles.headerRight}>
@@ -929,22 +946,27 @@ export default function NeuroCashApp() {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
-          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <Ionicons name="search" size={18} color="#94A3B8" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search for ATMs in other areas..."
-            placeholderTextColor="#9CA3AF"
+            placeholder="Search city or area..."
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={handleSearch}
             returnKeyType="search"
           />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          ) : null}
         </View>
         <TouchableOpacity onPress={handleSearch} style={styles.searchActionBtn} disabled={isSearching}>
-          {isSearching ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.searchBtnText}>Search</Text>}
+          {isSearching ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="arrow-forward" size={20} color="#FFF" />}
         </TouchableOpacity>
         <TouchableOpacity onPress={fetchLocationWithPermission} style={styles.myLocationBtn}>
-          <Ionicons name="locate" size={20} color="#4F46E5" />
+          <Ionicons name="locate" size={20} color="#6366F1" />
         </TouchableOpacity>
       </View>
 
@@ -995,65 +1017,67 @@ const styles = StyleSheet.create({
   authSubtitle: { fontSize: 16, color: '#6B7280', textAlign: 'center', marginBottom: 32 },
   googleButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4285F4', paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', justifyContent: 'center' },
   googleButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600', marginLeft: 12 },
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
+  container: { flex: 1, backgroundColor: '#0F172A' },
   loadingContainer: { flex: 1, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
   loadingContent: { alignItems: 'center' },
   loadingIconContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   loadingTitle: { fontSize: 28, fontWeight: '700', color: '#1F2937' },
   loadingSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
   loadingText: { marginTop: 16, fontSize: 14, color: '#6B7280' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16, backgroundColor: '#1E293B', borderBottomWidth: 1, borderBottomColor: '#334155' },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  logoContainer: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1F2937' },
-  headerSubtitle: { fontSize: 12, color: '#6B7280' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  profileButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEF2FF', borderRadius: 20 },
-  karmaBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 4 },
+  logoContainer: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#F8FAFC', letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
+  liveIndicator: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981', marginRight: 6 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  profileButton: { width: 38, height: 38, justifyContent: 'center', alignItems: 'center', backgroundColor: '#334155', borderRadius: 19, borderWidth: 1.5, borderColor: '#475569' },
+  karmaBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
   karmaGold: { backgroundColor: '#F59E0B' },
-  karmaSilver: { backgroundColor: '#9CA3AF' },
+  karmaSilver: { backgroundColor: '#94A3B8' },
   karmaBronze: { backgroundColor: '#B45309' },
-  karmaText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  refreshButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center' },
-  searchContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', alignItems: 'center' },
-  searchInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 44, marginRight: 8 },
+  karmaText: { color: '#FFF', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+  refreshButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#475569' },
+  searchContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#1E293B', alignItems: 'center' },
+  searchInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#334155', borderRadius: 14, paddingHorizontal: 12, height: 48, marginRight: 8 },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 15, color: '#1F2937', height: '100%' },
-  searchActionBtn: { backgroundColor: '#4F46E5', height: 44, paddingHorizontal: 16, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-  searchBtnText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
-  myLocationBtn: { width: 44, height: 44, backgroundColor: '#EEF2FF', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  locationBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, backgroundColor: '#EEF2FF' },
-  locationText: { fontSize: 12, color: '#4F46E5', marginLeft: 4, fontWeight: '500' },
-  locationDivider: { width: 1, height: 14, backgroundColor: '#A5B4FC', marginHorizontal: 12 },
-  liveDotSmall: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
-  liveTextSmall: { fontSize: 12, color: '#22C55E', fontWeight: '600', marginLeft: 4 },
-  legend: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  searchInput: { flex: 1, fontSize: 15, color: '#F1F5F9', height: '100%' },
+  searchActionBtn: { backgroundColor: '#6366F1', height: 48, width: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 8, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  searchBtnText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  myLocationBtn: { width: 48, height: 48, backgroundColor: '#334155', borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#475569' },
+  locationBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, backgroundColor: '#312E81' },
+  locationText: { fontSize: 12, color: '#E0E7FF', marginLeft: 6, fontWeight: '600' },
+  locationDivider: { width: 1, height: 14, backgroundColor: '#4338CA', marginHorizontal: 12 },
+  liveDotSmall: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981', shadowColor: '#10B981', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4 },
+  liveTextSmall: { fontSize: 11, color: '#10B981', fontWeight: '800', marginLeft: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+  legend: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12, backgroundColor: '#1E293B', borderBottomWidth: 1, borderBottomColor: '#334155' },
   legendItem: { flexDirection: 'row', alignItems: 'center' },
-  legendDot: { width: 12, height: 12, borderRadius: 6, marginRight: 6 },
-  legendText: { fontSize: 12, color: '#4B5563', fontWeight: '500' },
-  listContainer: { flex: 1, padding: 16 },
-  emptyState: { alignItems: 'center', paddingVertical: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#374151', marginTop: 16 },
-  emptySubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
-  atmCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  legendDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  legendText: { fontSize: 11, color: '#94A3B8', fontWeight: '600', textTransform: 'uppercase' },
+  listContainer: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
+  emptyState: { alignItems: 'center', paddingVertical: 64 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#F8FAFC', marginTop: 16 },
+  emptySubtitle: { fontSize: 14, color: '#94A3B8', marginTop: 4, textAlign: 'center' },
+  atmCard: { backgroundColor: '#1E293B', borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#334155', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 4 },
   atmCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   statusIndicator: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   atmCardInfo: { flex: 1 },
-  atmBankName: { fontSize: 17, fontWeight: '600', color: '#1F2937' },
-  atmBranchName: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  inRangeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#DCFCE7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-  inRangeText: { fontSize: 12, color: '#22C55E', fontWeight: '600', marginLeft: 4 },
+  atmBankName: { fontSize: 18, fontWeight: '700', color: '#F8FAFC' },
+  atmBranchName: { fontSize: 13, color: '#94A3B8', marginTop: 4 },
+  inRangeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
+  inRangeText: { fontSize: 11, color: '#10B981', fontWeight: '800', marginLeft: 4, textTransform: 'uppercase' },
   atmCardBody: { marginBottom: 12 },
-  atmInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  atmAddress: { marginLeft: 8, fontSize: 14, color: '#4B5563', flex: 1 },
-  atmDistance: { marginLeft: 8, fontSize: 14, color: '#4F46E5', fontWeight: '600' },
-  atmCardFooter: { flexDirection: 'row', alignItems: 'center' },
-  statusBadge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
-  statusBadgeText: { fontSize: 13, fontWeight: '600' },
-  offlineBadge: { flexDirection: 'row', alignItems: 'center', marginLeft: 10, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#FEE2E2', borderRadius: 10 },
-  offlineBadgeText: { fontSize: 12, color: '#EF4444', fontWeight: '600', marginLeft: 4 },
-  infoBar: { paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#4F46E5' },
-  infoBarText: { color: '#FFF', fontSize: 13, textAlign: 'center', fontWeight: '500' },
+  atmInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  atmAddress: { marginLeft: 10, fontSize: 14, color: '#94A3B8', flex: 1 },
+  atmDistance: { marginLeft: 10, fontSize: 14, color: '#6366F1', fontWeight: '700' },
+  atmCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  statusBadge: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderHeight: 1 },
+  statusBadgeText: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  offlineBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: 'rgba(244, 63, 94, 0.15)', borderRadius: 10, borderWidth: 1, borderColor: 'rgba(244, 63, 94, 0.3)' },
+  offlineBadgeText: { fontSize: 11, color: '#F43F5E', fontWeight: '800', marginLeft: 4, textTransform: 'uppercase' },
+  infoBar: { paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#6366F1' },
+  infoBarText: { color: '#FFF', fontSize: 12, textAlign: 'center', fontWeight: '700', letterSpacing: 0.3 },
   promptOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   promptContent: { backgroundColor: '#FFF', borderRadius: 24, padding: 24, alignItems: 'center', width: '100%', maxWidth: 340 },
   promptIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
