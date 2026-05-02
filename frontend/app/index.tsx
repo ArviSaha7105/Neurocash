@@ -140,8 +140,10 @@ export default function NeuroCashApp() {
     if (response?.type === 'success') {
       const { authentication } = response;
       if (authentication?.accessToken) {
-        AsyncStorage.setItem('googleToken', authentication.accessToken);
-        setIsAuthenticated(true);
+        AsyncStorage.setItem('googleToken', authentication.accessToken).then(() => {
+          setIsAuthenticated(true);
+          fetchUserProfile();
+        });
       }
     }
   }, [response]);
@@ -215,8 +217,10 @@ export default function NeuroCashApp() {
   };
 
   useEffect(() => {
-    fetchUserProfile();
-  }, []);
+    if (isAuthenticated) {
+      fetchUserProfile();
+    }
+  }, [isAuthenticated]);
 
   const fetchLocationWithPermission = useCallback(async () => {
     try {
