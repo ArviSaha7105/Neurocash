@@ -171,7 +171,6 @@ export default function NeuroCashApp() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
-  const [addModalVisible, setAddModalVisible] = useState(false);
   const [newBankName, setNewBankName] = useState('');
   const [newBranchName, setNewBranchName] = useState('');
   const [atmPhoto, setAtmPhoto] = useState<string | null>(null);
