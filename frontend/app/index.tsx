@@ -169,6 +169,8 @@ export default function NeuroCashApp() {
   const [submitting, setSubmitting] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [addModalVisible, setAddModalVisible] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newBankName, setNewBankName] = useState('');
   const [newBranchName, setNewBranchName] = useState('');
@@ -221,7 +223,14 @@ export default function NeuroCashApp() {
         });
         setUserKarma(response.data.karma_score);
         setUserLevel(response.data.karma_level);
-        setUserPicture(response.data.picture || null);
+        setUserPicture(decodedToken.picture);
+      
+        const adminList = ["arvisaha7105@gmail.com", "admin@neurocash.com"];
+        if (adminList.includes(decodedToken.email)) {
+          setIsAdmin(true);
+        }
+      
+        return decodedToken;
       }
     } catch (e) {
       console.log('Error fetching user profile:', e);
@@ -1213,6 +1222,11 @@ export default function NeuroCashApp() {
               <View style={styles.notifBadge} />
             )}
           </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity onPress={() => router.push('/admin')} style={styles.adminBtn}>
+              <Ionicons name="stats-chart" size={20} color="#6366F1" />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileButton}>
             {userPicture ? (
               <Image source={{ uri: userPicture }} style={{width: 28, height: 28, borderRadius: 14}} />
@@ -1399,6 +1413,7 @@ const styles = StyleSheet.create({
   directionsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6366F1', paddingVertical: 18, borderRadius: 20, marginTop: 12, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
   directionsButtonText: { color: '#FFF', fontWeight: '900', fontSize: 16, marginLeft: 8, textTransform: 'uppercase', letterSpacing: 1 },
   notificationBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#475569', position: 'relative' },
+  adminBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#6366F1' },
   notifBadge: { position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 5, backgroundColor: '#F43F5E', borderWidth: 2, borderColor: '#334155' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   notifContent: { backgroundColor: '#1E293B', borderRadius: 24, width: '100%', maxWidth: 340, padding: 20, borderWidth: 1, borderColor: '#334155' },

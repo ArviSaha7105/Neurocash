@@ -110,6 +110,13 @@ class ATMAddRequest(BaseModel):
     address: str
     image_base64: Optional[str] = None
 
+class AdminStats(BaseModel):
+    total_users: int
+    active_atms: int
+    status_distribution: dict
+    recent_activity_count: int
+    top_contributors: list
+
 # ==================== UTILITY FUNCTIONS ====================
 
 async def process_karma_updates(atm_id: str, new_status: Optional[str] = None):
@@ -802,6 +809,44 @@ async def confirm_atm_location(atm_id: str, exists: bool, user_id: str = Depends
         return {"message": "ATM removed due to community reports"}
 
     return {"message": "Thank you for your verification vote!", "current_votes": votes}
+
+# ==================== ADMIN ENDPOINTS ====================
+
+@api_router.get("/admin/stats")
+async def get_admin_stats(user_id: str = Depends(verify_google_token)):
+    """Fetch high-level analytics for the admin dashboard."""
+    # Security check: only allow master admins
+    # In a real app, this would check an 'is_admin' field in the User model
+    master_admins = ["arvisaha7105@gmail.com", "admin@neurocash.com"]
+    user = await db.users.find_one({"google_id": user_id})
+    if not user or (user.get("email") not in master_admins and user.get("google_id") not in master_admins):
+        raise HTTPException(status_code=403, detail="Unauthorized: Admin access only")
+
+    # Aggregations
+    total_users = await db.users.count_documents({})
+    total_atms = await db.atms.count_documents({})
+    
+    # Status distribution
+    pipeline = [{"$group": {"_id": "$current_status", "count": {"$sum": 1}}}]
+    cursor = db.atms.aggregate(pipeline)
+    status_counts = {item["_id"]: item["count"] async for item in cursor}
+    
+    # Recent reports (last 24h)
+    yesterday = datetime.utcnow() - timedelta(days=1)
+    recent_reports = await db.atms.count_documents({"last_report_time": {"$gte": yesterday}})
+    
+    # Top contributors
+    top_users = await db.users.find().sort("points", -1).limit(5).to_list(5)
+    contributors = [{"name": u.get("name"), "points": u.get("points"), "level": u.get("level", "Bronze")} for u in top_users]
+    
+    return {
+        "total_users": total_users,
+        "total_atms": total_atms,
+        "status_distribution": status_counts,
+        "recent_reports_24h": recent_reports,
+        "top_contributors": contributors,
+        "uptime_percentage": (status_counts.get("green", 0) / total_atms * 100) if total_atms > 0 else 0
+    }
 
 # TC_04: Mock Bank Gateway
 @api_router.post("/bank/gateway/status")
