@@ -85,18 +85,7 @@ const STATUS_ICONS: Record<string, string> = {
   grey: 'help-circle',
 };
 
-const darkMapStyle = [
-  { "elementType": "geometry", "stylers": [{ "color": "#1e293b" }] },
-  { "elementType": "labels.text.fill", "stylers": [{ "color": "#94a3b8" }] },
-  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#1e293b" }] },
-  { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#334155" }] },
-  { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#94a3b8" }] },
-  { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#0f172a" }] },
-  { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#334155" }] },
-  { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#1e293b" }] },
-  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#64748b" }] },
-  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#0f172a" }] }
-];
+
 
 // Haversine distance calculation
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -728,8 +717,8 @@ export default function NeuroCashApp() {
                       <div id="map"></div>
                       <script>
                           var map = L.map('map').setView([${userLocation.latitude}, ${userLocation.longitude}], 14);
-                          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                              attribution: '© OpenStreetMap contributors, © CARTO'
+                          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                              attribution: '© OpenStreetMap contributors'
                           }).addTo(map);
                           
                           // User marker
@@ -774,7 +763,6 @@ export default function NeuroCashApp() {
                   longitudeDelta: 0.04,
                 }}
                 showsUserLocation={true}
-                customMapStyle={darkMapStyle}
               >
                 {/* Explicit Marker for User Location */}
                 <Marker
