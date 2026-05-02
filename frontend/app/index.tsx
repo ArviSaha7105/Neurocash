@@ -624,10 +624,14 @@ export default function NeuroCashApp() {
       <Modal visible={reportModalVisible} animationType="slide" transparent onRequestClose={() => setReportModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.detailContent}>
+            <View style={styles.sheetHandle} />
             <View style={styles.detailHeader}>
-              <Text style={styles.detailBankName}>{selectedATM.bank_name}</Text>
+              <View style={styles.detailTitleWrapper}>
+                <Text style={styles.detailBankName}>{selectedATM.bank_name}</Text>
+                <Text style={styles.detailBranchName}>{selectedATM.branch_name}</Text>
+              </View>
               <TouchableOpacity style={styles.closeButton} onPress={() => setReportModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#64748b" />
+                <Ionicons name="close" size={24} color="#94A3B8" />
               </TouchableOpacity>
             </View>
 
@@ -1151,11 +1155,11 @@ const styles = StyleSheet.create({
   statusBadgeLargeText: { color: '#FFF', fontWeight: '600', fontSize: 15, marginLeft: 8 },
   infoSection: { marginBottom: 12 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  infoText: { marginLeft: 12, fontSize: 15, color: '#4B5563', flex: 1 },
+  infoText: { color: '#94A3B8', fontSize: 15, marginLeft: 12, flex: 1, fontWeight: '500' },
   offlineWarning: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', padding: 14, borderRadius: 14, marginTop: 8 },
   offlineText: { marginLeft: 12, color: '#991B1B', fontWeight: '600', fontSize: 15 },
-  directionsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4F46E5', paddingVertical: 14, borderRadius: 14, marginBottom: 16 },
-  directionsButtonText: { color: '#FFF', fontWeight: '700', fontSize: 15, marginLeft: 8 },
+  directionsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#6366F1', paddingVertical: 16, borderRadius: 16, marginTop: 8, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
+  directionsButtonText: { color: '#FFF', fontWeight: '800', fontSize: 16, marginLeft: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   notificationBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#475569', position: 'relative' },
   notifBadge: { position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 5, backgroundColor: '#F43F5E', borderWidth: 2, borderColor: '#334155' },
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
