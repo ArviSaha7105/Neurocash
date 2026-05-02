@@ -446,13 +446,13 @@ export default function NeuroCashApp() {
         atm.longitude
       );
 
-      if (distance <= 50 && !promptedATMs.has(atm.id)) {
+      if (distance <= 50 && !promptedATMsRef.current.has(atm.id)) {
         setNearbyATMPrompt(atm);
-        setPromptedATMs((prev) => new Set(prev).add(atm.id));
+        promptedATMsRef.current.add(atm.id);
         break;
       }
     }
-  }, [userLocation, atms, promptedATMs]);
+  }, [userLocation, atms]);
 
   // Check geofence when ATM is selected
   useEffect(() => {
