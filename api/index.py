@@ -96,6 +96,12 @@ class BankGatewayStatus(BaseModel):
     bank_name: str
     status: str  # "ONLINE", "OFFLINE"
 
+class ATMSubscription(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    atm_id: str
+    user_id: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
 # ==================== UTILITY FUNCTIONS ====================
 
 async def process_karma_updates(atm_id: str, new_status: Optional[str] = None):
@@ -554,6 +560,10 @@ async def report_atm_status(
         # Queue karma processing
         background_tasks.add_task(process_karma_updates, atm_id, new_status)
         
+        # Trigger "Back in Stock" notifications (Point 4)
+        if report.status == "cash":
+            background_tasks.add_task(notify_subscribers, atm_id)
+        
         return {
             "message": "Status reported successfully",
             "report_id": status_report.id,
@@ -617,6 +627,64 @@ async def get_atm_status(atm_id: str):
     except Exception as e:
         logger.error(f"Error getting ATM status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+async def notify_subscribers(atm_id: str):
+    """Notify users who subscribed to an ATM when it gets cash."""
+    subscriptions = await db.atm_subscriptions.find({"atm_id": atm_id}).to_list(100)
+    if not subscriptions:
+        return
+        
+    atm = await db.atms.find_one({"id": atm_id})
+    atm_name = atm.get("bank_name", "ATM") if atm else "ATM"
+    
+    for sub in subscriptions:
+        user_id = sub["user_id"]
+        # In a real app, this would trigger a Firebase/Expo Push Notification
+        # For now, we'll store a notification in a new collection for the user to see
+        notification = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "title": "💰 Cash Available!",
+            "message": f"Good news! Cash was just reported at {atm_name}.",
+            "atm_id": atm_id,
+            "timestamp": datetime.utcnow(),
+            "read": False
+        }
+        await db.notifications.insert_one(notification)
+        # Delete the subscription once notified
+        await db.atm_subscriptions.delete_one({"id": sub["id"]})
+
+@api_router.post("/atms/{atm_id}/subscribe")
+async def subscribe_to_atm(atm_id: str, user_id: str = Depends(verify_google_token)):
+    """Subscribe to receive a notification when an ATM gets cash."""
+    # Check if already subscribed
+    existing = await db.atm_subscriptions.find_one({"atm_id": atm_id, "user_id": user_id})
+    if existing:
+        return {"message": "Already subscribed to this ATM"}
+        
+    subscription = ATMSubscription(atm_id=atm_id, user_id=user_id)
+    await db.atm_subscriptions.insert_one(subscription.dict())
+    return {"message": "Successfully subscribed to notifications"}
+
+@api_router.get("/user/notifications")
+async def get_user_notifications(user_id: str = Depends(verify_google_token)):
+    """Get all notifications for a user."""
+    notifications = await db.notifications.find({"user_id": user_id}).sort("timestamp", -1).to_list(20)
+    # Format for JSON
+    for n in notifications:
+        n["id"] = str(n.get("id"))
+        n["timestamp"] = n["timestamp"].isoformat()
+        if "_id" in n: del n["_id"]
+    return notifications
+
+@api_router.post("/user/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, user_id: str = Depends(verify_google_token)):
+    """Mark a notification as read."""
+    await db.notifications.update_one(
+        {"id": notif_id, "user_id": user_id},
+        {"$set": {"read": True}}
+    )
+    return {"status": "success"}
 
 # TC_04: Mock Bank Gateway
 @api_router.post("/bank/gateway/status")

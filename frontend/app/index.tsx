@@ -63,6 +63,14 @@ interface UserLocation {
   longitude: number;
 }
 
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
+
 // Status colors
 const STATUS_COLORS: Record<string, string> = {
   green: '#10B981', // Emerald
@@ -158,6 +166,8 @@ export default function NeuroCashApp() {
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [isWithinGeofence, setIsWithinGeofence] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [userId] = useState(`user_${Date.now()}`);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [nearbyATMPrompt, setNearbyATMPrompt] = useState<ATM | null>(null);
@@ -221,6 +231,7 @@ export default function NeuroCashApp() {
   useEffect(() => {
     if (isAuthenticated) {
       fetchUserProfile();
+      fetchNotifications();
     }
   }, [isAuthenticated]);
 
@@ -484,33 +495,67 @@ export default function NeuroCashApp() {
     setSubmitting(true);
     try {
       const token = await AsyncStorage.getItem('googleToken');
-
-      await axios.post(`${BACKEND_URL}/api/reports`, {
-        user_lat: userLocation.latitude,
-        user_lng: userLocation.longitude,
-        status,
-        atm_name: selectedATM.bank_name,
-        atm_vicinity: selectedATM.branch_name,
-        atm_lat: selectedATM.latitude,
-        atm_lng: selectedATM.longitude
-      }, {
-        params: { atm_id: selectedATM.id },
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      await axios.post(`${BACKEND_URL}/api/atms/${selectedATM.id}/report`, { status }, {
+        headers: { Authorization: token ? `Bearer ${token}` : {} }
       });
-
-      if (!isWeb) {
-        Alert.alert('Thank You!', 'Your report helps other users find cash!');
+      if (Platform.OS !== 'web') {
+        Alert.alert("Success", "Status updated! You've earned 10 points.");
+      } else {
+        window.alert("Success! Status updated. You've earned 10 points.");
       }
       setReportModalVisible(false);
-      setNearbyATMPrompt(null);
-      fetchNearbyATMs(true); // Force update on report
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Failed to submit report.';
-      if (!isWeb) {
-        Alert.alert('Error', errorMsg);
+      fetchNearbyATMs(true);
+    } catch (error) {
+      console.error('Error reporting status:', error);
+      if (Platform.OS !== 'web') {
+        Alert.alert("Error", "Could not submit report.");
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubscribe = async () => {
+    if (!selectedATM) return;
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      await axios.post(`${BACKEND_URL}/api/atms/${selectedATM.id}/subscribe`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (Platform.OS !== 'web') {
+        Alert.alert("Subscribed", "We will notify you as soon as cash is reported at this ATM.");
+      } else {
+        window.alert("Subscribed! We will notify you as soon as cash is reported at this ATM.");
+      }
+      fetchNotifications();
+    } catch (error) {
+      console.error('Error subscribing:', error);
+    }
+  };
+
+  const markAsRead = async (id: string) => {
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      await axios.post(`${BACKEND_URL}/api/user/notifications/${id}/read`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+    } catch (error) {
+      console.error('Error marking as read:', error);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const token = await AsyncStorage.getItem('googleToken');
+      if (token) {
+        const response = await axios.get(`${BACKEND_URL}/api/user/notifications`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setNotifications(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
     }
   };
 
@@ -575,32 +620,30 @@ export default function NeuroCashApp() {
   const renderATMModal = () => {
     if (!selectedATM) return null;
 
-    const distanceToATM = userLocation
-      ? haversineDistance(userLocation.latitude, userLocation.longitude, selectedATM.latitude, selectedATM.longitude)
-      : 0;
-
     return (
       <Modal visible={reportModalVisible} animationType="slide" transparent onRequestClose={() => setReportModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderLeft}>
-                <View style={[styles.modalStatusIndicator, { backgroundColor: getStatusColor(selectedATM.current_status) }]}>
-                  <Ionicons name="cash" size={24} color="#FFF" />
-                </View>
-                <View style={styles.modalHeaderInfo}>
-                  <Text style={styles.modalTitle}>{selectedATM.bank_name}</Text>
-                  <Text style={styles.modalSubtitle}>{selectedATM.branch_name}</Text>
-                </View>
-              </View>
-              <TouchableOpacity onPress={() => setReportModalVisible(false)} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color="#374151" />
+          <View style={styles.detailContent}>
+            <View style={styles.detailHeader}>
+              <Text style={styles.detailBankName}>{selectedATM.bank_name}</Text>
+              <TouchableOpacity style={styles.closeButton} onPress={() => setReportModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.statusBadgeLarge, { backgroundColor: getStatusColor(selectedATM.current_status) }]}>
-              <Ionicons name={STATUS_ICONS[selectedATM.current_status] as any} size={20} color="#FFF" />
-              <Text style={styles.statusBadgeLargeText}>{STATUS_LABELS[selectedATM.current_status]}</Text>
+            <View style={styles.detailStatusSection}>
+              <View style={[styles.detailStatusBadge, { backgroundColor: getStatusColor(selectedATM.current_status) + '20' }]}>
+                <Ionicons name={STATUS_ICONS[selectedATM.current_status] as any} size={24} color={getStatusColor(selectedATM.current_status)} />
+                <Text style={[styles.detailStatusText, { color: getStatusColor(selectedATM.current_status) }]}>
+                  {STATUS_LABELS[selectedATM.current_status]}
+                </Text>
+              </View>
+              {selectedATM.current_status !== 'green' && (
+                <TouchableOpacity style={styles.notifyButton} onPress={handleSubscribe}>
+                  <Ionicons name="notifications-outline" size={18} color="#6366F1" />
+                  <Text style={styles.notifyButtonText}>Notify Me When Cash is Back</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.infoSection}>
@@ -608,45 +651,17 @@ export default function NeuroCashApp() {
                 <Ionicons name="location-outline" size={20} color="#6B7280" />
                 <Text style={styles.infoText}>{selectedATM.address}</Text>
               </View>
-              <View style={styles.infoRow}>
-                <Ionicons name="navigate-outline" size={20} color="#6B7280" />
-                <Text style={styles.infoText}>{distanceToATM.toFixed(0)}m away</Text>
-              </View>
-              {!selectedATM.bank_online && (
-                <View style={styles.offlineWarning}>
-                  <Ionicons name="warning" size={20} color="#EF4444" />
-                  <Text style={styles.offlineText}>Bank server offline</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Get Directions Button */}
-            <TouchableOpacity style={styles.directionsButton} onPress={() => openInGoogleMaps(selectedATM)}>
-              <Ionicons name="navigate" size={20} color="#FFF" />
-              <Text style={styles.directionsButtonText}>Get Directions</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.geofenceStatus, { backgroundColor: isWithinGeofence ? '#DCFCE7' : '#FEE2E2' }]}>
-              <Ionicons
-                name={isWithinGeofence ? 'checkmark-circle' : 'close-circle'}
-                size={28}
-                color={isWithinGeofence ? '#22C55E' : '#EF4444'}
-              />
-              <View style={styles.geofenceTextContainer}>
-                <Text style={[styles.geofenceTitle, { color: isWithinGeofence ? '#166534' : '#991B1B' }]}>
-                  {isWithinGeofence ? 'Within Geofence (50m)' : 'Outside Geofence'}
-                </Text>
-                <Text style={[styles.geofenceSubtext, { color: isWithinGeofence ? '#166534' : '#991B1B' }]}>
-                  {isWithinGeofence ? 'You can report ATM status' : `Move ${Math.max(0, distanceToATM - 50).toFixed(0)}m closer to report`}
-                </Text>
-              </View>
+              <TouchableOpacity style={styles.directionsButton} onPress={() => openInGoogleMaps(selectedATM)}>
+                <Ionicons name="navigate" size={20} color="#FFF" />
+                <Text style={styles.directionsButtonText}>Get Directions</Text>
+              </TouchableOpacity>
             </View>
 
             <Text style={styles.reportTitle}>Report ATM Status</Text>
             <View style={styles.reportButtonsGrid}>
               <TouchableOpacity
                 style={[styles.reportButton, { backgroundColor: '#22C55E' }, !isWithinGeofence && styles.reportButtonDisabled]}
-                onPress={() => reportStatus('cash')}
+                onPress={() => reportStatus('green')}
                 disabled={!isWithinGeofence || submitting}
               >
                 <Ionicons name="checkmark-circle" size={32} color="#FFF" />
@@ -655,7 +670,7 @@ export default function NeuroCashApp() {
 
               <TouchableOpacity
                 style={[styles.reportButton, { backgroundColor: '#EAB308' }, !isWithinGeofence && styles.reportButtonDisabled]}
-                onPress={() => reportStatus('low_cash')}
+                onPress={() => reportStatus('yellow')}
                 disabled={!isWithinGeofence || submitting}
               >
                 <Ionicons name="alert-circle" size={32} color="#FFF" />
@@ -664,7 +679,7 @@ export default function NeuroCashApp() {
 
               <TouchableOpacity
                 style={[styles.reportButton, { backgroundColor: '#F97316' }, !isWithinGeofence && styles.reportButtonDisabled]}
-                onPress={() => reportStatus('long_queue')}
+                onPress={() => reportStatus('grey')}
                 disabled={!isWithinGeofence || submitting}
               >
                 <Ionicons name="people" size={32} color="#FFF" />
@@ -673,7 +688,7 @@ export default function NeuroCashApp() {
 
               <TouchableOpacity
                 style={[styles.reportButton, { backgroundColor: '#EF4444' }, !isWithinGeofence && styles.reportButtonDisabled]}
-                onPress={() => reportStatus('no_cash')}
+                onPress={() => reportStatus('red')}
                 disabled={!isWithinGeofence || submitting}
               >
                 <Ionicons name="close-circle" size={32} color="#FFF" />
@@ -711,6 +726,15 @@ export default function NeuroCashApp() {
                       <style>
                           body { margin: 0; padding: 0; }
                           #map { width: 100vw; height: 100vh; }
+                          .pulsing-marker {
+                              filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.8));
+                              animation: pulse-glow 2s infinite;
+                          }
+                          @keyframes pulse-glow {
+                              0% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.5)); }
+                              50% { transform: scale(1.1); filter: drop-shadow(0 0 15px rgba(16, 185, 129, 0.9)); }
+                              100% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(16, 185, 129, 0.5)); }
+                          }
                       </style>
                   </head>
                   <body>
@@ -727,6 +751,7 @@ export default function NeuroCashApp() {
                   
                           // ATM markers
                           var atms = ${JSON.stringify(atms)};
+                          var now = new Date();
                           var colors = {
                               'green': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
                               'yellow': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
@@ -735,16 +760,26 @@ export default function NeuroCashApp() {
                           };
                   
                           atms.forEach(function(atm) {
+                              var isFresh = false;
+                              if (atm.last_report_time) {
+                                  var reportTime = new Date(atm.last_report_time);
+                                  var diffMins = (now - reportTime) / (1000 * 60);
+                                  if (diffMins <= 30 && atm.current_status === 'green') {
+                                      isFresh = true;
+                                  }
+                              }
+
                               var icon = new L.Icon({
                                   iconUrl: colors[atm.current_status] || colors['grey'],
                                   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
                                   iconSize: [25, 41],
                                   iconAnchor: [12, 41],
                                   popupAnchor: [1, -34],
-                                  shadowSize: [41, 41]
+                                  shadowSize: [41, 41],
+                                  className: isFresh ? 'pulsing-marker' : ''
                               });
                               L.marker([atm.latitude, atm.longitude], {icon: icon}).addTo(map)
-                                  .bindPopup('<b>' + atm.bank_name + '</b><br>' + atm.branch_name + '<br><b>Status:</b> ' + atm.current_status);
+                                  .bindPopup('<b>' + atm.bank_name + '</b><br>' + atm.branch_name + '<br><b>Status:</b> ' + atm.current_status + (isFresh ? '<br><span style="color: #10B981; font-weight: bold;">⚡ Just Verified!</span>' : ''));
                           });
                       </script>
                   </body>
@@ -895,6 +930,36 @@ export default function NeuroCashApp() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Notifications Modal */}
+      <Modal visible={showNotifications} animationType="fade" transparent onRequestClose={() => setShowNotifications(false)}>
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.notifContent}>
+            <View style={styles.notifHeader}>
+              <Text style={styles.notifTitle}>Notifications</Text>
+              <TouchableOpacity onPress={() => setShowNotifications(false)}>
+                <Ionicons name="close" size={24} color="#F8FAFC" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.notifList}>
+              {notifications.length === 0 ? (
+                <Text style={styles.noNotifText}>No recent alerts</Text>
+              ) : (
+                notifications.map(n => (
+                  <TouchableOpacity key={n.id} style={[styles.notifItem, !n.read && styles.notifItemUnread]} onPress={() => markAsRead(n.id)}>
+                    <View style={styles.notifIndicator} />
+                    <View style={styles.notifInfo}>
+                      <Text style={styles.notifMsgTitle}>{n.title}</Text>
+                      <Text style={styles.notifMsg}>{n.message}</Text>
+                      <Text style={styles.notifTime}>{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -918,15 +983,18 @@ export default function NeuroCashApp() {
             <Ionicons name="star" size={12} color="#FFF" />
             <Text style={styles.karmaText}>{userLevel} ({userKarma.toFixed(1)})</Text>
           </View>
+          <TouchableOpacity onPress={() => setShowNotifications(true)} style={styles.notificationBtn}>
+            <Ionicons name="notifications" size={20} color="#F8FAFC" />
+            {notifications.filter(n => !n.read).length > 0 && (
+              <View style={styles.notifBadge} />
+            )}
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push('/profile')} style={styles.profileButton}>
             {userPicture ? (
               <Image source={{ uri: userPicture }} style={{width: 28, height: 28, borderRadius: 14}} />
             ) : (
               <Ionicons name="person-circle" size={28} color="#4F46E5" />
             )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.refreshButton} onPress={() => fetchNearbyATMs(true)}>
-            <Ionicons name="refresh" size={22} color="#4F46E5" />
           </TouchableOpacity>
         </View>
       </View>
@@ -1026,7 +1094,6 @@ const styles = StyleSheet.create({
   karmaSilver: { backgroundColor: '#94A3B8' },
   karmaBronze: { backgroundColor: '#B45309' },
   karmaText: { color: '#FFF', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  refreshButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#475569' },
   searchContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#1E293B', alignItems: 'center' },
   searchInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F172A', borderWidth: 1, borderColor: '#334155', borderRadius: 14, paddingHorizontal: 12, height: 48, marginRight: 8 },
   searchIcon: { marginRight: 8 },
@@ -1080,14 +1147,6 @@ const styles = StyleSheet.create({
   promptButtonTextPrimary: { color: '#FFF', fontWeight: '600', fontSize: 16, marginLeft: 8 },
   promptButtonTextSecondary: { color: '#4B5563', fontWeight: '600', fontSize: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: height * 0.85 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  modalHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  modalStatusIndicator: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  modalHeaderInfo: { flex: 1 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#1F2937' },
-  modalSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 2 },
-  closeButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
   statusBadgeLarge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 14, alignSelf: 'flex-start', marginBottom: 16 },
   statusBadgeLargeText: { color: '#FFF', fontWeight: '600', fontSize: 15, marginLeft: 8 },
   infoSection: { marginBottom: 12 },
@@ -1096,7 +1155,22 @@ const styles = StyleSheet.create({
   offlineWarning: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', padding: 14, borderRadius: 14, marginTop: 8 },
   offlineText: { marginLeft: 12, color: '#991B1B', fontWeight: '600', fontSize: 15 },
   directionsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4F46E5', paddingVertical: 14, borderRadius: 14, marginBottom: 16 },
-  directionsButtonText: { color: '#FFF', fontWeight: '600', fontSize: 15, marginLeft: 8 },
+  directionsButtonText: { color: '#FFF', fontWeight: '700', fontSize: 15, marginLeft: 8 },
+  notificationBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#334155', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: '#475569', position: 'relative' },
+  notifBadge: { position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 5, backgroundColor: '#F43F5E', borderWidth: 2, borderColor: '#334155' },
+  modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  notifContent: { backgroundColor: '#1E293B', borderRadius: 24, width: '100%', maxWidth: 340, padding: 20, borderWidth: 1, borderColor: '#334155' },
+  notifHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  notifTitle: { fontSize: 20, fontWeight: '800', color: '#F8FAFC' },
+  notifList: { maxHeight: 400 },
+  noNotifText: { color: '#94A3B8', textAlign: 'center', paddingVertical: 40, fontSize: 15 },
+  notifItem: { flexDirection: 'row', padding: 12, borderRadius: 16, marginBottom: 8, backgroundColor: '#0F172A' },
+  notifItemUnread: { borderWidth: 1, borderColor: '#6366F1' },
+  notifIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#6366F1', marginTop: 6, marginRight: 12 },
+  notifInfo: { flex: 1 },
+  notifMsgTitle: { color: '#F8FAFC', fontWeight: '700', fontSize: 14, marginBottom: 2 },
+  notifMsg: { color: '#94A3B8', fontSize: 13, lineHeight: 18 },
+  notifTime: { color: '#475569', fontSize: 11, marginTop: 4, fontWeight: '600' },
   geofenceStatus: { flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 18, marginBottom: 20 },
   geofenceTextContainer: { marginLeft: 14, flex: 1 },
   geofenceTitle: { fontSize: 17, fontWeight: '600' },
